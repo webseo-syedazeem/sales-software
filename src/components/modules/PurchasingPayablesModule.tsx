@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import { Truck, Plus, PackageCheck, DollarSign, Star, Building } from "lucide-react";
@@ -86,7 +86,7 @@ export function PurchasingPayablesModule({
             key={k}
             onClick={() => setTab(k)}
             className={`rounded-xl px-4 py-2 text-xs font-semibold cursor-pointer ${
-              tab === k ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+              tab === k ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
             }`}
           >
             {label}
@@ -112,8 +112,8 @@ export function PurchasingPayablesModule({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {state.purchaseOrders.map((po) => (
-                  <tr key={po.id} className="hover:bg-blue-500/5">
-                    <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{po.poNo}</td>
+                  <tr key={po.id} className="hover:bg-[#F8F7F3]">
+                    <td className="px-4 py-3 font-mono-num font-bold text-[#1E3FAE]">{po.poNo}</td>
                     <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                       {state.suppliers.find((s) => s.id === po.supplierId)?.companyName}
                     </td>
@@ -129,7 +129,7 @@ export function PurchasingPayablesModule({
                         {po.status !== "Received" && (
                           <button
                             onClick={() => onRunAction("purchase:receive", { poId: po.id })}
-                            className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 cursor-pointer inline-flex items-center gap-1"
+                            className="rounded-lg bg-[#E3F5EC] px-2.5 py-1 text-[11px] font-semibold text-[#05603F] hover:bg-emerald-500/25 cursor-pointer inline-flex items-center gap-1"
                           >
                             <PackageCheck className="h-3.5 w-3.5" /> Receive Goods
                           </button>
@@ -137,7 +137,7 @@ export function PurchasingPayablesModule({
                         {po.paymentStatus !== "Paid" && (
                           <button
                             onClick={() => onRunAction("purchase:pay", { poId: po.id })}
-                            className="rounded-lg bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/25 cursor-pointer"
+                            className="rounded-lg bg-[#E6EDFD] px-2.5 py-1 text-[11px] font-semibold text-[#1E3FAE] hover:bg-blue-500/25 cursor-pointer"
                           >
                             Pay Bill
                           </button>
@@ -158,7 +158,7 @@ export function PurchasingPayablesModule({
             <GlassCard key={s.id} hover>
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="font-mono-num text-[11px] font-bold text-blue-400">{s.vendorCode}</span>
+                  <span className="font-mono-num text-[11px] font-bold text-[#1E3FAE]">{s.vendorCode}</span>
                   <h3 className="text-base font-bold text-[var(--text-primary)] mt-0.5">{s.companyName}</h3>
                   <p className="text-xs text-[var(--text-muted)]">{s.category} · {s.state}</p>
                 </div>
@@ -167,11 +167,11 @@ export function PurchasingPayablesModule({
               <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[var(--bg-elevated)] p-3 text-xs border border-[var(--border-subtle)]">
                 <div>
                   <p className="text-[10px] uppercase text-[var(--text-muted)]">Payable Balance</p>
-                  <p className="font-mono-num font-bold text-amber-400">{formatUSD(s.currentPayable)}</p>
+                  <p className="font-mono-num font-bold text-[#7F4505]">{formatUSD(s.currentPayable)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase text-[var(--text-muted)]">On-Time Rate</p>
-                  <p className="font-mono-num font-bold text-emerald-400">{s.onTimeDeliveryRate}% (★ {s.rating})</p>
+                  <p className="font-mono-num font-bold text-[#05603F]">{s.onTimeDeliveryRate}% (★ {s.rating})</p>
                 </div>
               </div>
               <p className="mt-3 text-xs text-[var(--text-secondary)]">
@@ -201,15 +201,15 @@ export function PurchasingPayablesModule({
                 {state.purchaseOrders.map((po) => {
                   const due = po.total - po.amountPaid;
                   return (
-                    <tr key={po.id} className="hover:bg-blue-500/5">
+                    <tr key={po.id} className="hover:bg-[#F8F7F3]">
                       <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                         {state.suppliers.find((s) => s.id === po.supplierId)?.companyName}
                       </td>
-                      <td className="px-4 py-3 font-mono-num text-blue-400">{po.poNo}</td>
+                      <td className="px-4 py-3 font-mono-num text-[#1E3FAE]">{po.poNo}</td>
                       <td className="px-4 py-3">{formatUSDate(po.dueDate)}</td>
                       <td className="px-4 py-3 text-right font-mono-num">{formatUSD(po.total)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-400">{formatUSD(po.amountPaid)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num font-bold text-amber-400">{formatUSD(due)}</td>
+                      <td className="px-4 py-3 text-right font-mono-num text-[#05603F]">{formatUSD(po.amountPaid)}</td>
+                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#7F4505]">{formatUSD(due)}</td>
                       <td className="px-4 py-3 text-right">
                         {due > 0 ? (
                           <SecondaryButton
@@ -311,7 +311,7 @@ export function PurchasingPayablesModule({
           </div>
           <input placeholder="PO Notes" value={poForm.notes} onChange={(e) => setPoForm({ ...poForm, notes: e.target.value })} className="erp-input" />
           <div className="flex justify-between items-center pt-2">
-            <span className="text-sm font-bold font-mono-num text-blue-400">
+            <span className="text-sm font-bold font-mono-num text-[#1E3FAE]">
               PO Total: {formatUSD(poForm.quantity * poForm.unitCost)}
             </span>
             <div className="flex gap-2">

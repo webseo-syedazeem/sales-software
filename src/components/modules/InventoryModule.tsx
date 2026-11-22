@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import {
@@ -175,8 +175,8 @@ export function InventoryModule({
               onClick={() => setTab(k)}
               className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-all ${
                 tab === k
-                  ? "bg-blue-600 text-white"
-                  : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-white"
+                  ? "bg-[#111317] text-white"
+                  : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[#111317]"
               }`}
             >
               {label}
@@ -221,25 +221,25 @@ export function InventoryModule({
                   const wh = state.warehouses.find((w) => w.id === lot.warehouseId);
                   const low = prod ? lot.availableStock < prod.reorderLevel / 2 : false;
                   return (
-                    <tr key={lot.id} className="hover:bg-blue-500/5">
+                    <tr key={lot.id} className="hover:bg-[#F8F7F3]">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-[var(--text-primary)]">{prod?.name}</p>
-                        <p className="font-mono-num text-[11px] text-blue-400">{prod?.sku}</p>
+                        <p className="font-mono-num text-[11px] text-[#1E3FAE]">{prod?.sku}</p>
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-[var(--text-primary)]">{wh?.code}</p>
                         <p className="text-[11px] text-[var(--text-muted)]">{wh?.location}</p>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num font-bold text-emerald-400">
+                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#05603F]">
                         {lot.availableStock.toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-blue-300">
+                      <td className="px-4 py-3 text-right font-mono-num text-[#1E3FAE]">
                         {lot.reservedStock}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-rose-400">
+                      <td className="px-4 py-3 text-right font-mono-num text-[#A11A1A]">
                         {lot.damagedStock}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-amber-400">
+                      <td className="px-4 py-3 text-right font-mono-num text-[#7F4505]">
                         {lot.returnedStock}
                       </td>
                       <td className="px-4 py-3 text-right font-mono-num text-[var(--text-secondary)]">
@@ -280,9 +280,9 @@ export function InventoryModule({
                   const prod = state.products.find((p) => p.id === lot.productId);
                   const wh = state.warehouses.find((w) => w.id === lot.warehouseId);
                   return (
-                    <tr key={lot.id} className="hover:bg-blue-500/5">
+                    <tr key={lot.id} className="hover:bg-[#F8F7F3]">
                       <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">{prod?.name}</td>
-                      <td className="px-4 py-3 font-mono-num text-blue-400">{lot.batchNo}</td>
+                      <td className="px-4 py-3 font-mono-num text-[#1E3FAE]">{lot.batchNo}</td>
                       <td className="px-4 py-3 font-mono-num">{lot.lotNo}</td>
                       <td className="px-4 py-3 font-mono-num text-[var(--text-secondary)]">
                         {lot.serialPrefix}0001 — {lot.serialPrefix}{String(lot.openingStock).padStart(4, "0")}
@@ -290,7 +290,7 @@ export function InventoryModule({
                       <td className="px-4 py-3">{wh?.name}</td>
                       <td className="px-4 py-3">{formatUSDate(lot.receivedDate)}</td>
                       <td className="px-4 py-3 text-right font-mono-num font-bold">
-                        {lot.openingStock} → <span className="text-emerald-400">{lot.availableStock}</span>
+                        {lot.openingStock} → <span className="text-[#05603F]">{lot.availableStock}</span>
                       </td>
                     </tr>
                   );
@@ -304,10 +304,10 @@ export function InventoryModule({
       {tab === "aging" && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {[
-            { label: "0–30 Days (Fresh)", min: 0, max: 30, tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" },
-            { label: "31–60 Days (Active)", min: 31, max: 60, tone: "border-blue-500/30 bg-blue-500/10 text-blue-400" },
-            { label: "61–90 Days (Slow)", min: 61, max: 90, tone: "border-amber-500/30 bg-amber-500/10 text-amber-400" },
-            { label: "90+ Days (Aging Risk)", min: 91, max: 9999, tone: "border-rose-500/30 bg-rose-500/10 text-rose-400" },
+            { label: "0–30 Days (Fresh)", min: 0, max: 30, tone: "border-emerald-500/30 bg-emerald-500/10 text-[#05603F]" },
+            { label: "31–60 Days (Active)", min: 31, max: 60, tone: "border-blue-500/30 bg-[#E6EDFD] text-[#1E3FAE]" },
+            { label: "61–90 Days (Slow)", min: 61, max: 90, tone: "border-[#F3D7AA] bg-[#FDF0DC] text-[#7F4505]" },
+            { label: "90+ Days (Aging Risk)", min: 91, max: 9999, tone: "border-rose-500/30 bg-rose-500/10 text-[#A11A1A]" },
           ].map((bucket) => {
             const todayStr = new Date().toISOString().slice(0, 10);
             const items = summary.lots.filter((l) => {
@@ -335,7 +335,7 @@ export function InventoryModule({
       {tab === "movements" && (
         <GlassCard className="p-0 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
-            <History className="h-4 w-4 text-blue-400" />
+            <History className="h-4 w-4 text-[#1E3FAE]" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
               Immutable Stock Movement Audit Trail
             </h3>
@@ -356,7 +356,7 @@ export function InventoryModule({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {state.stockMovements.map((m) => (
-                  <tr key={m.id} className="hover:bg-blue-500/5">
+                  <tr key={m.id} className="hover:bg-[#F8F7F3]">
                     <td className="px-4 py-2.5 whitespace-nowrap">{formatUSDate(m.date)}</td>
                     <td className="px-4 py-2.5"><StatusBadge status={m.type} /></td>
                     <td className="px-4 py-2.5 font-semibold text-[var(--text-primary)]">
@@ -369,11 +369,11 @@ export function InventoryModule({
                         : ""}
                     </td>
                     <td className="px-4 py-2.5 text-right font-mono-num font-bold">{m.quantity}</td>
-                    <td className="px-4 py-2.5 text-right font-mono-num text-blue-400">
+                    <td className="px-4 py-2.5 text-right font-mono-num text-[#1E3FAE]">
                       {m.previousQty} → {m.newQty}
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="font-mono-num text-blue-300">{m.referenceNo}</span> · {m.notes}
+                      <span className="font-mono-num text-[#1E3FAE]">{m.referenceNo}</span> · {m.notes}
                     </td>
                     <td className="px-4 py-2.5 text-[var(--text-secondary)]">{m.performedBy}</td>
                   </tr>

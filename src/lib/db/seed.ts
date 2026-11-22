@@ -151,9 +151,9 @@ export function createCleanProductionState(): ERPDatabaseState {
   return {
     settings: {
       id: "company-settings",
-      activeCompany: "ApexLedger Enterprise Corp.",
-      companies: ["ApexLedger Enterprise Corp."],
-      legalName: "ApexLedger Enterprise Corp.",
+      activeCompany: "Nexora Plastics Inc.",
+      companies: ["Nexora Plastics Inc."],
+      legalName: "Nexora Plastics Inc.",
       ein: "",
       address: "",
       cityStateZip: "",

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import {
@@ -173,8 +173,8 @@ export function ProductsModule({
                 onClick={() => setCategoryFilter(cat)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                   categoryFilter === cat
-                    ? "bg-blue-600 text-white"
-                    : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-white"
+                    ? "bg-[#111317] text-white"
+                    : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[#111317]"
                 }`}
               >
                 {cat}
@@ -205,7 +205,7 @@ export function ProductsModule({
               <div>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="font-mono-num text-[11px] font-bold text-blue-400">
+                    <span className="font-mono-num text-[11px] font-bold text-[#1E3FAE]">
                       {product.sku}
                     </span>
                     <h3 className="text-lg font-bold text-[var(--text-primary)] mt-0.5">
@@ -229,23 +229,23 @@ export function ProductsModule({
                   </div>
                   <div>
                     <p className="text-[10px] uppercase text-[var(--text-muted)]">Selling</p>
-                    <p className="font-mono-num text-xs font-bold text-emerald-400">
+                    <p className="font-mono-num text-xs font-bold text-[#05603F]">
                       {formatUSD(product.sellingPrice)}
                     </p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase text-[var(--text-muted)]">Wholesale</p>
-                    <p className="font-mono-num text-xs font-bold text-blue-400">
+                    <p className="font-mono-num text-xs font-bold text-[#1E3FAE]">
                       {formatUSD(product.wholesalePrice)}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-3 flex items-center justify-between text-xs">
-                  <span className={isLow ? "text-rose-400 font-semibold" : "text-[var(--text-secondary)]"}>
+                  <span className={isLow ? "text-[#A11A1A] font-semibold" : "text-[var(--text-secondary)]"}>
                     Stock: <strong className="font-mono-num">{m.totalStock.toLocaleString()}</strong> {product.uom}s {isLow ? "(Low!)" : ""}
                   </span>
-                  <span className="inline-flex items-center gap-1 font-mono-num text-emerald-400 font-semibold">
+                  <span className="inline-flex items-center gap-1 font-mono-num text-[#05603F] font-semibold">
                     <TrendingUp className="h-3.5 w-3.5" /> {marginPct}% GM
                   </span>
                 </div>
@@ -254,7 +254,7 @@ export function ProductsModule({
                   {product.variants.slice(0, 3).map((v) => (
                     <span
                       key={v.id}
-                      className="rounded-md bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 text-[10px] font-medium text-blue-300"
+                      className="rounded-md bg-[#E6EDFD] border border-[#C7D8FA] px-2 py-0.5 text-[10px] font-medium text-[#1E3FAE]"
                     >
                       {v.name}
                     </span>
@@ -268,7 +268,7 @@ export function ProductsModule({
                     setSelected(product);
                     setDetailTab("overview");
                   }}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:text-blue-300 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1E3FAE] hover:text-[#1E3FAE] cursor-pointer"
                 >
                   <QrCode className="h-3.5 w-3.5" /> 360° Details & Codes
                 </button>
@@ -278,7 +278,7 @@ export function ProductsModule({
                       setEditing({ ...product });
                       setFormOpen(true);
                     }}
-                    className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-blue-500/15 hover:text-blue-400 cursor-pointer"
+                    className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[#E6EDFD] hover:text-[#1E3FAE] cursor-pointer"
                     title="Edit Product"
                   >
                     <Edit3 className="h-3.5 w-3.5" />
@@ -289,7 +289,7 @@ export function ProductsModule({
                         onRunAction("product:delete", { id: product.id });
                       }
                     }}
-                    className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-rose-500/15 hover:text-rose-400 cursor-pointer"
+                    className="rounded-lg p-1.5 text-[var(--text-secondary)] hover:bg-[#FCE8E8] hover:text-[#A11A1A] cursor-pointer"
                     title="Delete Product"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -326,7 +326,7 @@ export function ProductsModule({
                   onClick={() => setDetailTab(key)}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
                     detailTab === key
-                      ? "bg-blue-600 text-white"
+                      ? "bg-[#111317] text-white"
                       : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
                   }`}
                 >
@@ -338,7 +338,7 @@ export function ProductsModule({
             {detailTab === "overview" && (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-2.5">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#1E3FAE]">
                     Specifications & Attributes
                   </h4>
                   <p className="text-xs text-[var(--text-secondary)]">{selected.description}</p>
@@ -352,7 +352,7 @@ export function ProductsModule({
                   </div>
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {selected.attributes.map((a) => (
-                      <span key={a} className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                      <span key={a} className="rounded-full bg-[#E3F5EC] px-2.5 py-0.5 text-[11px] font-medium text-[#05603F]">
                         {a}
                       </span>
                     ))}
@@ -360,7 +360,7 @@ export function ProductsModule({
                 </div>
 
                 <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#05603F]">
                     Multi-Level Enterprise Pricing
                   </h4>
                   <table className="w-full text-xs">
@@ -379,8 +379,8 @@ export function ProductsModule({
                           <tr key={pl.tier}>
                             <td className="py-2 font-semibold text-[var(--text-primary)]">{pl.tier}</td>
                             <td className="py-2 text-right font-mono-num">{pl.minQty}+</td>
-                            <td className="py-2 text-right font-mono-num font-bold text-emerald-400">{formatUSD(pl.price)}</td>
-                            <td className="py-2 text-right font-mono-num text-blue-400">{gm}%</td>
+                            <td className="py-2 text-right font-mono-num font-bold text-[#05603F]">{formatUSD(pl.price)}</td>
+                            <td className="py-2 text-right font-mono-num text-[#1E3FAE]">{gm}%</td>
                           </tr>
                         );
                       })}
@@ -394,9 +394,9 @@ export function ProductsModule({
                       </h5>
                       <div className="space-y-1.5">
                         {selected.variants.map((v) => (
-                          <div key={v.id} className="flex justify-between text-xs rounded-lg bg-slate-900/50 px-2.5 py-1.5">
+                          <div key={v.id} className="flex justify-between text-xs rounded-lg bg-[#F6F5F1] border border-[#EEECE7] px-2.5 py-1.5">
                             <span>{v.name} ({selected.sku}{v.skuSuffix})</span>
-                            <span className="font-mono-num text-blue-300">
+                            <span className="font-mono-num text-[#1E3FAE]">
                               {formatUSD(selected.sellingPrice + v.priceDelta)} · {v.stock} avail
                             </span>
                           </div>
@@ -450,12 +450,12 @@ export function ProductsModule({
                       )
                       .map(({ inv, li }, idx) => (
                         <tr key={idx}>
-                          <td className="py-2 font-mono-num text-blue-400 font-semibold">{inv.invoiceNo}</td>
+                          <td className="py-2 font-mono-num text-[#1E3FAE] font-semibold">{inv.invoiceNo}</td>
                           <td className="py-2">{formatUSDate(inv.issueDate)}</td>
                           <td className="py-2">{state.customers.find((c) => c.id === inv.customerId)?.companyName}</td>
                           <td className="py-2 text-right font-mono-num">{li.quantity}</td>
                           <td className="py-2 text-right font-mono-num font-bold">{formatUSD(li.lineTotal)}</td>
-                          <td className="py-2 text-right font-mono-num text-emerald-400 font-bold">
+                          <td className="py-2 text-right font-mono-num text-[#05603F] font-bold">
                             {formatUSD(li.lineTotal - li.costBasis * li.quantity)}
                           </td>
                         </tr>
@@ -487,7 +487,7 @@ export function ProductsModule({
                       )
                       .map(({ po, pi }, idx) => (
                         <tr key={idx}>
-                          <td className="py-2 font-mono-num text-blue-400 font-semibold">{po.poNo}</td>
+                          <td className="py-2 font-mono-num text-[#1E3FAE] font-semibold">{po.poNo}</td>
                           <td className="py-2">{formatUSDate(po.date)}</td>
                           <td className="py-2">{state.suppliers.find((s) => s.id === po.supplierId)?.companyName}</td>
                           <td className="py-2 text-right font-mono-num">{pi.quantity}</td>
@@ -513,7 +513,7 @@ export function ProductsModule({
                         <p className="text-[var(--text-muted)]">{m.notes} · by {m.performedBy}</p>
                       </div>
                       <div className="text-right font-mono-num">
-                        <p className="font-bold text-blue-400">{m.previousQty} → {m.newQty}</p>
+                        <p className="font-bold text-[#1E3FAE]">{m.previousQty} → {m.newQty}</p>
                         <p className="text-[11px] text-[var(--text-muted)]">{formatUSDate(m.date)}</p>
                       </div>
                     </div>

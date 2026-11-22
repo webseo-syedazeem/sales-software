@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import {
@@ -96,7 +96,7 @@ export function AdminSecurityModule({
             key={k}
             onClick={() => setTab(k)}
             className={`rounded-xl px-4 py-2 text-xs font-semibold cursor-pointer ${
-              tab === k ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+              tab === k ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
             }`}
           >
             {label}
@@ -110,7 +110,7 @@ export function AdminSecurityModule({
           <GlassCard className="p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
-                <Users className="h-4 w-4 text-blue-400" /> Provisioned User Accounts & Login Activity
+                <Users className="h-4 w-4 text-[#1E3FAE]" /> Provisioned User Accounts & Login Activity
               </span>
               <PrimaryButton onClick={() => setUserOpen(true)} className="py-1.5 px-3 text-xs">
                 <Plus className="h-3.5 w-3.5" /> Provision User
@@ -154,7 +154,7 @@ export function AdminSecurityModule({
                         ) : (
                           <button
                             onClick={() => onRunAction("user:lock", { userId: u.id })}
-                            className="rounded-lg bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/25 cursor-pointer"
+                            className="rounded-lg bg-[#FCE8E8] px-2.5 py-1 text-[11px] font-semibold text-[#A11A1A] hover:bg-rose-500/25 cursor-pointer"
                           >
                             Lock & Revoke
                           </button>
@@ -170,7 +170,7 @@ export function AdminSecurityModule({
           {/* Permission Matrix */}
           <GlassCard className="p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              <ShieldCheck className="h-4 w-4 text-[#05603F]" />
               <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 Granular RBAC Permission Matrix (Toggle Live Permissions)
               </span>
@@ -224,7 +224,7 @@ export function AdminSecurityModule({
         <GlassCard className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-              <History className="h-4 w-4 text-blue-400" /> Complete Enterprise Activity & Change Log
+              <History className="h-4 w-4 text-[#1E3FAE]" /> Complete Enterprise Activity & Change Log
             </h3>
             <input
               value={auditSearch}
@@ -247,7 +247,7 @@ export function AdminSecurityModule({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {filteredAudit.map((log) => (
-                  <tr key={log.id} className="hover:bg-blue-500/5">
+                  <tr key={log.id} className="hover:bg-[#F8F7F3]">
                     <td className="px-3 py-2.5 font-mono-num text-[11px] whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString("en-US")}
                     </td>
@@ -258,12 +258,12 @@ export function AdminSecurityModule({
                     <td className="px-3 py-2.5"><StatusBadge status={log.action} /></td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium">{log.module}</p>
-                      <p className="font-mono-num text-[11px] text-blue-400">{log.recordId}</p>
+                      <p className="font-mono-num text-[11px] text-[#1E3FAE]">{log.recordId}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="text-[var(--text-primary)]">{log.summary}</p>
                       {(log.previousValue || log.newValue) && (
-                        <p className="font-mono-num text-[10px] text-amber-300 mt-0.5">
+                        <p className="font-mono-num text-[10px] text-[#7F4505] mt-0.5">
                           {log.previousValue ? `${log.previousValue} → ` : ""}
                           {log.newValue}
                         </p>
@@ -287,7 +287,7 @@ export function AdminSecurityModule({
           <GlassCard className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <DatabaseBackup className="h-5 w-5 text-emerald-400" /> Backup & Disaster Recovery Vault
+                <DatabaseBackup className="h-5 w-5 text-[#05603F]" /> Backup & Disaster Recovery Vault
               </h3>
               <p className="text-xs text-[var(--text-secondary)] mt-1">
                 Scheduled policy: <strong>{state.settings.autoBackupSchedule}</strong> · SHA-256 integrity checksums verified on every snapshot.
@@ -346,18 +346,18 @@ export function AdminSecurityModule({
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {state.backups.map((b) => (
                   <tr key={b.id}>
-                    <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{b.id}</td>
+                    <td className="px-4 py-3 font-mono-num font-bold text-[#1E3FAE]">{b.id}</td>
                     <td className="px-4 py-3">{new Date(b.createdAt).toLocaleString("en-US")}</td>
                     <td className="px-4 py-3">{b.type} · {b.createdBy}</td>
                     <td className="px-4 py-3 text-right font-mono-num">{b.recordCount} recs · {b.sizeKb} KB</td>
-                    <td className="px-4 py-3 font-mono-num text-emerald-400">{b.checksum}</td>
+                    <td className="px-4 py-3 font-mono-num text-[#05603F]">{b.checksum}</td>
                     <td className="px-4 py-3"><StatusBadge status={b.status} /></td>
                     <td className="px-4 py-3 text-right">
                       <SecondaryButton
                         onClick={() => onRunAction("backup:verify", { backupId: b.id })}
                         className="py-1 px-2.5 text-xs"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Verify
+                        <CheckCircle2 className="h-3.5 w-3.5 text-[#05603F]" /> Verify
                       </SecondaryButton>
                     </td>
                   </tr>
@@ -380,7 +380,7 @@ export function AdminSecurityModule({
               className="space-y-4"
             >
               <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Settings className="h-4 w-4 text-blue-400" /> Company Profile, Numbering & Security Policy
+                <Settings className="h-4 w-4 text-[#1E3FAE]" /> Company Profile, Numbering & Security Policy
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
@@ -425,7 +425,7 @@ export function AdminSecurityModule({
           <GlassCard className="lg:col-span-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Database className="h-4 w-4 text-emerald-400" /> MongoDB & Vercel Deployment
+                <Database className="h-4 w-4 text-[#05603F]" /> MongoDB & Vercel Deployment
               </h3>
               <StatusBadge status={storageMode === "mongodb" ? "Connected" : "Configured"} />
             </div>
@@ -434,7 +434,7 @@ export function AdminSecurityModule({
                 ? "Live MongoDB Atlas cluster connected. All 27 enterprise collections are persisting directly to MongoDB."
                 : "Running in auto-seeded local persistence mode. Add MONGODB_URI and JWT_SECRET in your Vercel Project Environment Variables to activate live 27-collection MongoDB Atlas storage automatically."}
             </p>
-            <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3 font-mono-num text-[11px] text-blue-300 space-y-1">
+            <div className="rounded-xl bg-[#111317] border border-[#2A2E37] text-[#C5F04A] p-3 font-mono-num text-[11px] text-[#1E3FAE] space-y-1">
               <p>MONGODB_URI=mongodb+srv://...</p>
               <p>JWT_SECRET=&lt;64-char-secret&gt;</p>
               <p>DATA_ENCRYPTION_KEY=&lt;32-byte-hex&gt;</p>
@@ -448,7 +448,7 @@ export function AdminSecurityModule({
               }}
               className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5"
             >
-              <p className="text-xs font-bold uppercase tracking-wider text-amber-400">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#7F4505]">
                 Rotate Your Password (Revokes Other Sessions)
               </p>
               <input

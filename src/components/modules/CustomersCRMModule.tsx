@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import {
@@ -154,7 +154,7 @@ export function CustomersCRMModule({
               onClick={() => setSegmentFilter(seg)}
               className={`rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
                 segmentFilter === seg
-                  ? "bg-blue-600 text-white"
+                  ? "bg-[#111317] text-white"
                   : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
               }`}
             >
@@ -173,11 +173,11 @@ export function CustomersCRMModule({
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono-num text-[11px] font-bold text-blue-400">
+                    <span className="font-mono-num text-[11px] font-bold text-[#1E3FAE]">
                       {c.customerCode}
                     </span>
                     {c.taxExempt && (
-                      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+                      <span className="rounded bg-[#E6EDFD] px-1.5 py-0.5 text-[10px] font-semibold text-[#1E3FAE]">
                         Tax-Exempt
                       </span>
                     )}
@@ -200,7 +200,7 @@ export function CustomersCRMModule({
               <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)] text-xs">
                 <div>
                   <p className="text-[10px] uppercase text-[var(--text-muted)]">Current Balance</p>
-                  <p className="font-mono-num font-bold text-amber-400">{formatUSD(c.currentBalance)}</p>
+                  <p className="font-mono-num font-bold text-[#7F4505]">{formatUSD(c.currentBalance)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase text-[var(--text-muted)]">Credit Limit</p>
@@ -208,18 +208,18 @@ export function CustomersCRMModule({
                 </div>
                 <div>
                   <p className="text-[10px] uppercase text-[var(--text-muted)]">Terms</p>
-                  <p className="font-semibold text-blue-400">{c.paymentTerms}</p>
+                  <p className="font-semibold text-[#1E3FAE]">{c.paymentTerms}</p>
                 </div>
               </div>
 
               <div className="mt-3">
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-[var(--text-muted)]">Credit Utilization</span>
-                  <span className={`font-mono-num font-bold ${util > 85 ? "text-rose-400" : "text-emerald-400"}`}>
+                  <span className={`font-mono-num font-bold ${util > 85 ? "text-[#A11A1A]" : "text-[#05603F]"}`}>
                     {util}%
                   </span>
                 </div>
-                <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-[#ECEAE4] overflow-hidden">
                   <div
                     className={`h-full rounded-full ${util > 85 ? "bg-rose-500" : util > 65 ? "bg-amber-500" : "bg-blue-500"}`}
                     style={{ width: `${util}%` }}
@@ -253,7 +253,7 @@ export function CustomersCRMModule({
               <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)] flex flex-col justify-between">
                 <div>
                   <p className="text-[var(--text-muted)] uppercase text-[10px]">Open Ledger Balance</p>
-                  <p className="mt-1 text-lg font-bold font-mono-num text-amber-400">
+                  <p className="mt-1 text-lg font-bold font-mono-num text-[#7F4505]">
                     {formatUSD(selected.currentBalance)}
                   </p>
                 </div>
@@ -262,7 +262,7 @@ export function CustomersCRMModule({
                     setSelectedId(null);
                     onNavigate("ledger");
                   }}
-                  className="text-left text-blue-400 font-semibold hover:underline cursor-pointer mt-1"
+                  className="text-left text-[#1E3FAE] font-semibold hover:underline cursor-pointer mt-1"
                 >
                   Open Full Customer Ledger →
                 </button>
@@ -272,7 +272,7 @@ export function CustomersCRMModule({
             {/* CRM Follow-ups & Communications */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1E3FAE] flex items-center gap-1.5">
                   <CalendarClock className="h-3.5 w-3.5" /> Follow-ups & Reminders
                 </h4>
                 <div className="space-y-2">
@@ -280,7 +280,7 @@ export function CustomersCRMModule({
                     <p className="text-xs text-[var(--text-muted)]">No open tasks scheduled.</p>
                   )}
                   {selected.tasks.map((t) => (
-                    <div key={t.id} className="rounded-lg bg-slate-900/60 p-2.5 text-xs">
+                    <div key={t.id} className="rounded-lg bg-[#F6F5F1] border border-[#EEECE7] p-2.5 text-xs">
                       <div className="flex justify-between">
                         <span className="font-semibold text-[var(--text-primary)]">{t.title}</span>
                         <StatusBadge status={t.priority} />
@@ -324,7 +324,7 @@ export function CustomersCRMModule({
               </div>
 
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#05603F] flex items-center gap-1.5">
                   <MessageSquarePlus className="h-3.5 w-3.5" /> Communication Timeline
                 </h4>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -332,9 +332,9 @@ export function CustomersCRMModule({
                     <p className="text-xs text-[var(--text-muted)]">No communication logs yet.</p>
                   )}
                   {selected.communications.map((cm) => (
-                    <div key={cm.id} className="rounded-lg bg-slate-900/60 p-2.5 text-xs">
+                    <div key={cm.id} className="rounded-lg bg-[#F6F5F1] border border-[#EEECE7] p-2.5 text-xs">
                       <div className="flex justify-between text-[11px] text-[var(--text-muted)]">
-                        <span className="font-semibold text-blue-300">{cm.channel} · {cm.author}</span>
+                        <span className="font-semibold text-[#1E3FAE]">{cm.channel} · {cm.author}</span>
                         <span>{formatUSDate(cm.date)}</span>
                       </div>
                       <p className="mt-1 text-[var(--text-primary)]">{cm.summary}</p>
@@ -379,7 +379,7 @@ export function CustomersCRMModule({
             {/* Outstanding Invoices */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2 flex items-center gap-1.5">
-                <Award className="h-3.5 w-3.5 text-amber-400" /> Invoices & Transaction History
+                <Award className="h-3.5 w-3.5 text-[#7F4505]" /> Invoices & Transaction History
               </h4>
               <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
                 <table className="w-full text-left text-xs">
@@ -398,11 +398,11 @@ export function CustomersCRMModule({
                       .filter((i) => i.customerId === selected.id)
                       .map((inv) => (
                         <tr key={inv.id}>
-                          <td className="px-3 py-2 font-mono-num text-blue-400 font-semibold">{inv.invoiceNo}</td>
+                          <td className="px-3 py-2 font-mono-num text-[#1E3FAE] font-semibold">{inv.invoiceNo}</td>
                           <td className="px-3 py-2">{formatUSDate(inv.issueDate)}</td>
                           <td className="px-3 py-2">{formatUSDate(inv.dueDate)}</td>
                           <td className="px-3 py-2 text-right font-mono-num">{formatUSD(inv.total)}</td>
-                          <td className="px-3 py-2 text-right font-mono-num font-bold text-amber-400">{formatUSD(inv.balanceDue)}</td>
+                          <td className="px-3 py-2 text-right font-mono-num font-bold text-[#7F4505]">{formatUSD(inv.balanceDue)}</td>
                           <td className="px-3 py-2 text-right"><StatusBadge status={inv.status} /></td>
                         </tr>
                       ))}

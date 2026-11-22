@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import {
@@ -162,8 +162,8 @@ export function LedgerReceivablesPaymentsModule({
             onClick={() => setTab(k)}
             className={`rounded-xl px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${
               tab === k
-                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
-                : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-white"
+                ? "bg-[#111317] text-white shadow-sm"
+                : "bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:text-[#111317]"
             }`}
           >
             {label}
@@ -252,7 +252,7 @@ export function LedgerReceivablesPaymentsModule({
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)]">
                   {ledgerData.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-blue-500/5">
+                    <tr key={entry.id} className="hover:bg-[#F8F7F3]">
                       <td className="px-4 py-3 whitespace-nowrap">{formatUSDate(entry.date)}</td>
                       {selectedCustomerId === "ALL" && (
                         <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
@@ -260,15 +260,15 @@ export function LedgerReceivablesPaymentsModule({
                         </td>
                       )}
                       <td className="px-4 py-3"><StatusBadge status={entry.type} /></td>
-                      <td className="px-4 py-3 font-mono-num font-semibold text-blue-400">{entry.referenceNo}</td>
+                      <td className="px-4 py-3 font-mono-num font-semibold text-[#1E3FAE]">{entry.referenceNo}</td>
                       <td className="px-4 py-3 text-[var(--text-secondary)]">{entry.description}</td>
                       <td className="px-4 py-3 text-right font-mono-num font-semibold text-[var(--text-primary)]">
                         {entry.debit > 0 ? formatUSD(entry.debit) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num font-semibold text-emerald-400">
+                      <td className="px-4 py-3 text-right font-mono-num font-semibold text-[#05603F]">
                         {entry.credit > 0 ? formatUSD(entry.credit) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num font-bold text-amber-400">
+                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#7F4505]">
                         {formatUSD(entry.runningBalance)}
                       </td>
                     </tr>
@@ -291,25 +291,25 @@ export function LedgerReceivablesPaymentsModule({
               <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={arData.chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
-                    <XAxis dataKey="bucket" stroke="#94a3b8" fontSize={11} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEECE7" />
+                    <XAxis dataKey="bucket" stroke="#6B6F78" fontSize={11} />
+                    <YAxis stroke="#6B6F78" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "#0f172a", borderRadius: "10px", fontSize: "12px" }}
+                      contentStyle={{ backgroundColor: "#111317", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12px" }}
                       formatter={(v: number) => formatUSD(v)}
                     />
-                    <Bar dataKey="amount" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="amount" fill="#16181D" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-[var(--border-subtle)]">
                 <div>
                   <p className="text-[var(--text-muted)]">Total Open AR</p>
-                  <p className="text-lg font-bold font-mono-num text-blue-400">{formatUSD(arData.totalAR)}</p>
+                  <p className="text-lg font-bold font-mono-num text-[#1E3FAE]">{formatUSD(arData.totalAR)}</p>
                 </div>
                 <div>
                   <p className="text-[var(--text-muted)]">Past Due Exposure</p>
-                  <p className="text-lg font-bold font-mono-num text-rose-400">{formatUSD(arData.overdueTotal)}</p>
+                  <p className="text-lg font-bold font-mono-num text-[#A11A1A]">{formatUSD(arData.overdueTotal)}</p>
                 </div>
               </div>
             </GlassCard>
@@ -319,7 +319,7 @@ export function LedgerReceivablesPaymentsModule({
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                   Outstanding & Overdue Invoices — Collection Queue
                 </span>
-                <Clock className="h-4 w-4 text-rose-400" />
+                <Clock className="h-4 w-4 text-[#A11A1A]" />
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
@@ -336,8 +336,8 @@ export function LedgerReceivablesPaymentsModule({
                     {arData.openInvoices.map((inv) => {
                       const days = daysBetween(inv.dueDate, arData.todayIso);
                       return (
-                        <tr key={inv.id} className="hover:bg-blue-500/5">
-                          <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{inv.invoiceNo}</td>
+                        <tr key={inv.id} className="hover:bg-[#F8F7F3]">
+                          <td className="px-4 py-3 font-mono-num font-bold text-[#1E3FAE]">{inv.invoiceNo}</td>
                           <td className="px-4 py-3">
                             <p className="font-medium text-[var(--text-primary)]">
                               {state.customers.find((c) => c.id === inv.customerId)?.companyName}
@@ -349,7 +349,7 @@ export function LedgerReceivablesPaymentsModule({
                           <td className="px-4 py-3">
                             <StatusBadge status={days > 0 ? `${days}d Overdue` : "Current"} />
                           </td>
-                          <td className="px-4 py-3 text-right font-mono-num font-bold text-amber-400">
+                          <td className="px-4 py-3 text-right font-mono-num font-bold text-[#7F4505]">
                             {formatUSD(inv.balanceDue)}
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -358,7 +358,7 @@ export function LedgerReceivablesPaymentsModule({
                                 onClick={() =>
                                   onRunAction("invoice:action", { invoiceId: inv.id, op: "reminder" })
                                 }
-                                className="rounded-lg bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/25 cursor-pointer inline-flex items-center gap-1"
+                                className="rounded-lg bg-[#FDF0DC] px-2.5 py-1 text-[11px] font-semibold text-[#7F4505] hover:bg-amber-500/25 cursor-pointer inline-flex items-center gap-1"
                               >
                                 <Mail className="h-3 w-3" /> Remind
                               </button>
@@ -375,7 +375,7 @@ export function LedgerReceivablesPaymentsModule({
                                   });
                                   setPaymentOpen(true);
                                 }}
-                                className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 cursor-pointer"
+                                className="rounded-lg bg-[#E3F5EC] px-2.5 py-1 text-[11px] font-semibold text-[#05603F] hover:bg-emerald-500/25 cursor-pointer"
                               >
                                 Collect
                               </button>
@@ -411,8 +411,8 @@ export function LedgerReceivablesPaymentsModule({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {state.payments.map((pay) => (
-                  <tr key={pay.id} className="hover:bg-blue-500/5">
-                    <td className="px-4 py-3 font-mono-num font-bold text-emerald-400">{pay.receiptNo}</td>
+                  <tr key={pay.id} className="hover:bg-[#F8F7F3]">
+                    <td className="px-4 py-3 font-mono-num font-bold text-[#05603F]">{pay.receiptNo}</td>
                     <td className="px-4 py-3">{formatUSDate(pay.date)}</td>
                     <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                       {state.customers.find((c) => c.id === pay.customerId)?.companyName}
@@ -422,7 +422,7 @@ export function LedgerReceivablesPaymentsModule({
                       <span className="ml-1.5 text-[11px] text-[var(--text-muted)]">({pay.paymentType})</span>
                     </td>
                     <td className="px-4 py-3 font-mono-num text-[var(--text-secondary)]">{pay.reference}</td>
-                    <td className="px-4 py-3 text-right font-mono-num font-bold text-emerald-400">
+                    <td className="px-4 py-3 text-right font-mono-num font-bold text-[#05603F]">
                       {formatUSD(pay.amount)}
                     </td>
                     <td className="px-4 py-3">
@@ -436,7 +436,7 @@ export function LedgerReceivablesPaymentsModule({
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => setReceiptPreview(pay)}
-                        className="rounded-lg bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-400 hover:bg-blue-500/25 cursor-pointer inline-flex items-center gap-1"
+                        className="rounded-lg bg-[#E6EDFD] px-2.5 py-1 text-[11px] font-semibold text-[#1E3FAE] hover:bg-blue-500/25 cursor-pointer inline-flex items-center gap-1"
                       >
                         <Receipt className="h-3 w-3" /> Receipt
                       </button>

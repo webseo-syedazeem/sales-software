@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import {
@@ -149,7 +149,7 @@ export function AccountingExpensesTaxModule({
             key={k}
             onClick={() => setTab(k)}
             className={`rounded-xl px-3.5 py-2 text-xs font-semibold cursor-pointer ${
-              tab === k ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+              tab === k ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
             }`}
           >
             {label}
@@ -166,26 +166,26 @@ export function AccountingExpensesTaxModule({
               <h3 className="text-sm font-bold text-[var(--text-primary)]">
                 Profit & Loss Statement (Income Statement)
               </h3>
-              <span className="text-[11px] font-mono-num text-blue-400">FY 2026 YTD</span>
+              <span className="text-[11px] font-mono-num text-[#1E3FAE]">FY 2026 YTD</span>
             </div>
             <div className="space-y-1.5 text-xs">
-              <p className="text-[10px] font-bold uppercase text-emerald-400">Operating Revenue</p>
+              <p className="text-[10px] font-bold uppercase text-[#05603F]">Operating Revenue</p>
               {statements.revenue.map((a) => (
                 <div key={a.id} className="flex justify-between py-1">
                   <span>{a.code} · {a.name}</span>
                   <span className="font-mono-num font-semibold">{formatUSD(a.balance)}</span>
                 </div>
               ))}
-              <p className="text-[10px] font-bold uppercase text-amber-400 pt-2">Cost of Goods & Operating Expenses</p>
+              <p className="text-[10px] font-bold uppercase text-[#7F4505] pt-2">Cost of Goods & Operating Expenses</p>
               {statements.expenses.map((a) => (
                 <div key={a.id} className="flex justify-between py-1">
                   <span>{a.code} · {a.name}</span>
-                  <span className="font-mono-num text-rose-300">({formatUSD(a.balance)})</span>
+                  <span className="font-mono-num text-[#A11A1A]">({formatUSD(a.balance)})</span>
                 </div>
               ))}
               <div className="flex justify-between border-t border-[var(--border-strong)] pt-3 text-sm font-bold">
                 <span>Net Operating Profit</span>
-                <span className={`font-mono-num ${statements.netIncome >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                <span className={`font-mono-num ${statements.netIncome >= 0 ? "text-[#05603F]" : "text-[#A11A1A]"}`}>
                   {formatUSD(statements.netIncome)}
                 </span>
               </div>
@@ -196,17 +196,17 @@ export function AccountingExpensesTaxModule({
           <GlassCard className="space-y-3">
             <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
               <h3 className="text-sm font-bold text-[var(--text-primary)]">Balance Sheet Summary</h3>
-              <span className="text-[11px] font-mono-num text-emerald-400">Double-Entry Verified</span>
+              <span className="text-[11px] font-mono-num text-[#05603F]">Double-Entry Verified</span>
             </div>
             <div className="space-y-1.5 text-xs">
-              <p className="text-[10px] font-bold uppercase text-blue-400">Assets ({formatUSD(statements.totalAssets)})</p>
+              <p className="text-[10px] font-bold uppercase text-[#1E3FAE]">Assets ({formatUSD(statements.totalAssets)})</p>
               {statements.assets.map((a) => (
                 <div key={a.id} className="flex justify-between py-0.5">
                   <span>{a.code} · {a.name}</span>
                   <span className="font-mono-num">{formatUSD(a.balance)}</span>
                 </div>
               ))}
-              <p className="text-[10px] font-bold uppercase text-rose-400 pt-2">
+              <p className="text-[10px] font-bold uppercase text-[#A11A1A] pt-2">
                 Liabilities ({formatUSD(statements.totalLiabilities)})
               </p>
               {statements.liabilities.map((a) => (
@@ -229,15 +229,15 @@ export function AccountingExpensesTaxModule({
             <div className="space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Operating Cash Inflows (Customer Collections)</span>
-                <span className="font-mono-num font-bold text-emerald-400">+{formatUSD(statements.cashInflows)}</span>
+                <span className="font-mono-num font-bold text-[#05603F]">+{formatUSD(statements.cashInflows)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Operating Cash Outflows (Suppliers & OpEx)</span>
-                <span className="font-mono-num font-bold text-rose-400">-{formatUSD(statements.cashOutflows)}</span>
+                <span className="font-mono-num font-bold text-[#A11A1A]">-{formatUSD(statements.cashOutflows)}</span>
               </div>
               <div className="flex justify-between border-t border-[var(--border-subtle)] pt-2 text-sm font-bold">
                 <span>Net Operating Cash Flow</span>
-                <span className="font-mono-num text-blue-400">
+                <span className="font-mono-num text-[#1E3FAE]">
                   {formatUSD(statements.cashInflows - statements.cashOutflows)}
                 </span>
               </div>
@@ -252,13 +252,13 @@ export function AccountingExpensesTaxModule({
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)]">
                 <p className="text-[var(--text-muted)] uppercase text-[10px]">Total Debit Balances (Assets + Exp)</p>
-                <p className="mt-1 text-lg font-bold font-mono-num text-blue-400">
+                <p className="mt-1 text-lg font-bold font-mono-num text-[#1E3FAE]">
                   {formatUSD(statements.totalAssets + statements.totalExpenses)}
                 </p>
               </div>
               <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)]">
                 <p className="text-[var(--text-muted)] uppercase text-[10px]">Total Credit Balances (Liab + Eq + Rev)</p>
-                <p className="mt-1 text-lg font-bold font-mono-num text-emerald-400">
+                <p className="mt-1 text-lg font-bold font-mono-num text-[#05603F]">
                   {formatUSD(statements.totalLiabilities + statements.totalEquity + statements.totalRevenue)}
                 </p>
               </div>
@@ -284,8 +284,8 @@ export function AccountingExpensesTaxModule({
               </thead>
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {state.accounts.map((acc) => (
-                  <tr key={acc.id} className="hover:bg-blue-500/5">
-                    <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{acc.code}</td>
+                  <tr key={acc.id} className="hover:bg-[#F8F7F3]">
+                    <td className="px-4 py-3 font-mono-num font-bold text-[#1E3FAE]">{acc.code}</td>
                     <td className="px-4 py-3 font-semibold text-[var(--text-primary)]">{acc.name}</td>
                     <td className="px-4 py-3"><StatusBadge status={acc.type} /></td>
                     <td className="px-4 py-3 text-[var(--text-secondary)]">{acc.subType}</td>
@@ -308,7 +308,7 @@ export function AccountingExpensesTaxModule({
             <GlassCard key={je.id} className="p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)]">
                 <div>
-                  <span className="font-mono-num text-xs font-bold text-blue-400">{je.entryNo}</span>
+                  <span className="font-mono-num text-xs font-bold text-[#1E3FAE]">{je.entryNo}</span>
                   <span className="mx-2 text-[var(--text-muted)]">·</span>
                   <span className="text-sm font-semibold text-[var(--text-primary)]">{je.description}</span>
                 </div>
@@ -330,7 +330,7 @@ export function AccountingExpensesTaxModule({
                     <tr key={idx}>
                       <td className="py-1.5 font-medium">{l.accountCode} — {l.accountName}</td>
                       <td className="py-1.5 text-right font-mono-num">{l.debit > 0 ? formatUSD(l.debit) : "—"}</td>
-                      <td className="py-1.5 text-right font-mono-num text-emerald-400">{l.credit > 0 ? formatUSD(l.credit) : "—"}</td>
+                      <td className="py-1.5 text-right font-mono-num text-[#05603F]">{l.credit > 0 ? formatUSD(l.credit) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -360,15 +360,15 @@ export function AccountingExpensesTaxModule({
                 {state.expenses.map((exp) => {
                   const over = exp.amount > exp.budgetAmount;
                   return (
-                    <tr key={exp.id} className="hover:bg-blue-500/5">
-                      <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{exp.expenseNo}</td>
+                    <tr key={exp.id} className="hover:bg-[#F8F7F3]">
+                      <td className="px-4 py-3 font-mono-num font-bold text-[#1E3FAE]">{exp.expenseNo}</td>
                       <td className="px-4 py-3">
                         <p className="font-semibold text-[var(--text-primary)]">{exp.category}</p>
                         <p className="text-[11px] text-[var(--text-muted)]">{exp.vendorName} — {exp.description}</p>
                       </td>
                       <td className="px-4 py-3">{exp.department}</td>
                       <td className="px-4 py-3 text-right font-mono-num">
-                        <span className={`font-bold ${over ? "text-rose-400" : "text-emerald-400"}`}>
+                        <span className={`font-bold ${over ? "text-[#A11A1A]" : "text-[#05603F]"}`}>
                           {formatUSD(exp.amount)}
                         </span>
                         <span className="text-[11px] text-[var(--text-muted)]"> / {formatUSD(exp.budgetAmount)}</span>
@@ -381,7 +381,7 @@ export function AccountingExpensesTaxModule({
                             onClick={() =>
                               onRunAction("expense:status", { expenseId: exp.id, status: "Approved" })
                             }
-                            className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 cursor-pointer inline-flex items-center gap-1"
+                            className="rounded-lg bg-[#E3F5EC] px-2.5 py-1 text-[11px] font-semibold text-[#05603F] hover:bg-emerald-500/25 cursor-pointer inline-flex items-center gap-1"
                           >
                             <CheckCircle2 className="h-3 w-3" /> Approve
                           </button>
@@ -401,11 +401,11 @@ export function AccountingExpensesTaxModule({
       {/* US TAX MANAGEMENT */}
       {tab === "tax" && (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3">
-            <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="rounded-2xl border border-[#F3D7AA] bg-[#FDF0DC] p-4 text-xs text-[#7F4505] flex items-start gap-3">
+            <ShieldAlert className="h-5 w-5 text-[#7F4505] shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">US Enterprise Tax Readiness & Compliance Scope Notice</p>
-              <p className="mt-1 text-amber-200/85">
+              <p className="mt-1 text-[#7F4505]">
                 This platform is engineered for US-facing operations (USD currency, US state/local sales tax rules, EIN/resale exemption flags, and audit trails). Formal statutory compliance certification or state nexus filing (e.g., Avalara/Vertex automated filing or GAAP external audit certification) should be scoped with your CPA / legal compliance advisor.
               </p>
             </div>
@@ -434,10 +434,10 @@ export function AccountingExpensesTaxModule({
                 <tbody className="divide-y divide-[var(--border-subtle)]">
                   {state.taxRules.map((tr) => (
                     <tr key={tr.id}>
-                      <td className="px-4 py-2.5 font-bold text-blue-400">{tr.stateCode} — {tr.stateName}</td>
+                      <td className="px-4 py-2.5 font-bold text-[#1E3FAE]">{tr.stateCode} — {tr.stateName}</td>
                       <td className="px-4 py-2.5 text-right font-mono-num">{tr.rate.toFixed(2)}%</td>
                       <td className="px-4 py-2.5 text-right font-mono-num">{tr.localSurtax.toFixed(3)}%</td>
-                      <td className="px-4 py-2.5 text-right font-mono-num font-bold text-emerald-400">
+                      <td className="px-4 py-2.5 text-right font-mono-num font-bold text-[#05603F]">
                         {(tr.rate + tr.localSurtax).toFixed(3)}%
                       </td>
                       <td className="px-4 py-2.5 text-[var(--text-muted)]">{tr.notes}</td>
@@ -449,7 +449,7 @@ export function AccountingExpensesTaxModule({
 
             <GlassCard className="lg:col-span-5 space-y-3">
               <div className="flex items-center gap-2">
-                <Percent className="h-4 w-4 text-blue-400" />
+                <Percent className="h-4 w-4 text-[#1E3FAE]" />
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">Sales Tax Summary by State</h3>
               </div>
               <div className="space-y-2.5">
@@ -459,7 +459,7 @@ export function AccountingExpensesTaxModule({
                       <p className="font-bold text-[var(--text-primary)]">{row.state} Jurisdiction</p>
                       <p className="text-[11px] text-[var(--text-muted)]">{row.invoices} invoices · Base {formatUSD(row.taxableSales)}</p>
                     </div>
-                    <p className="font-mono-num font-bold text-amber-400">{formatUSD(row.taxCollected)}</p>
+                    <p className="font-mono-num font-bold text-[#7F4505]">{formatUSD(row.taxCollected)}</p>
                   </div>
                 ))}
               </div>

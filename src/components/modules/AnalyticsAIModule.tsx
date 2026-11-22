@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import {
@@ -162,7 +162,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
             onClick={() => setTab(k)}
             className={`rounded-xl px-4 py-2 text-xs font-semibold cursor-pointer ${
               tab === k
-                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
+                ? "bg-[#111317] text-white shadow-sm"
                 : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
             }`}
           >
@@ -176,7 +176,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           <GlassCard className="lg:col-span-8 flex flex-col h-[560px]">
             <div className="flex items-center gap-2 pb-3 border-b border-[var(--border-subtle)]">
-              <BrainCircuit className="h-5 w-5 text-blue-400" />
+              <BrainCircuit className="h-5 w-5 text-[#1E3FAE]" />
               <div>
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">NexAI Live Database Copilot</h3>
                 <p className="text-[11px] text-[var(--text-muted)]">Real-time financial, AR, product & anomaly query engine</p>
@@ -192,7 +192,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed whitespace-pre-line ${
                       m.role === "user"
-                        ? "bg-blue-600 text-white"
+                        ? "bg-[#111317] text-white"
                         : "bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)]"
                     }`}
                   >
@@ -200,9 +200,9 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
                     {m.highlights && m.highlights.length > 0 && (
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         {m.highlights.map((h, i) => (
-                          <div key={i} className="rounded-xl bg-slate-950/60 border border-slate-700/60 px-2.5 py-2">
-                            <p className="text-[10px] text-slate-400 truncate">{h.label}</p>
-                            <p className="font-mono-num text-xs font-bold text-blue-300 mt-0.5">{h.value}</p>
+                          <div key={i} className="rounded-xl bg-[#F6F5F1] border border-[#E0DDD5] px-2.5 py-2">
+                            <p className="text-[10px] text-[#5F636C] truncate">{h.label}</p>
+                            <p className="font-mono-num text-xs font-bold text-[#1E3FAE] mt-0.5">{h.value}</p>
                           </div>
                         ))}
                       </div>
@@ -211,7 +211,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
                 </div>
               ))}
               {loading && (
-                <div className="text-xs text-blue-400 animate-pulse">Analyzing live ledger & inventory tables...</div>
+                <div className="text-xs text-[#1E3FAE] animate-pulse">Analyzing live ledger & inventory tables...</div>
               )}
             </div>
 
@@ -235,7 +235,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
           </GlassCard>
 
           <GlassCard className="lg:col-span-4 space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E3FAE] flex items-center gap-1.5">
               <Sparkles className="h-4 w-4" /> Executive One-Click Questions
             </h3>
             <div className="space-y-2">
@@ -243,7 +243,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
                 <button
                   key={q}
                   onClick={() => askAI(q)}
-                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3.5 py-2.5 text-left text-xs font-medium text-[var(--text-primary)] hover:border-blue-500/50 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                  className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-3.5 py-2.5 text-left text-xs font-medium text-[var(--text-primary)] hover:border-blue-500/50 hover:bg-[#E6EDFD] transition-colors cursor-pointer"
                 >
                   &ldquo;{q}&rdquo;
                 </button>
@@ -271,15 +271,15 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={bi.forecastData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
-                    <XAxis dataKey="period" stroke="#94a3b8" fontSize={11} />
-                    <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEECE7" />
+                    <XAxis dataKey="period" stroke="#6B6F78" fontSize={11} />
+                    <YAxis stroke="#6B6F78" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: "#0f172a", borderRadius: "10px", fontSize: "12px" }}
+                      contentStyle={{ backgroundColor: "#111317", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12px" }}
                       formatter={(v: number) => formatUSD(v)}
                     />
-                    <Line type="monotone" dataKey="actual" name="Actual Revenue" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
-                    <Line type="monotone" dataKey="forecast" name="Projected Forecast" stroke="#10b981" strokeDasharray="6 4" strokeWidth={2.5} />
+                    <Line type="monotone" dataKey="actual" name="Actual Revenue" stroke="#16181D" strokeWidth={3} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="forecast" name="Projected Forecast" stroke="#9BCB2E" strokeDasharray="6 4" strokeWidth={2.5} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -344,7 +344,7 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
           ].map((rep) => (
             <GlassCard key={rep.title} hover className="flex flex-col justify-between space-y-4">
               <div>
-                <FileSpreadsheet className="h-6 w-6 text-blue-400 mb-2" />
+                <FileSpreadsheet className="h-6 w-6 text-[#1E3FAE] mb-2" />
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">{rep.title}</h3>
                 <p className="text-xs text-[var(--text-secondary)] mt-1">{rep.desc}</p>
               </div>

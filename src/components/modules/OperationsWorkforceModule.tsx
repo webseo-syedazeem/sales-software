@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import {
@@ -101,7 +101,7 @@ export function OperationsWorkforceModule({
             key={k}
             onClick={() => setTab(k)}
             className={`rounded-xl px-3.5 py-2 text-xs font-semibold cursor-pointer ${
-              tab === k ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+              tab === k ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
             }`}
           >
             {label}
@@ -119,14 +119,14 @@ export function OperationsWorkforceModule({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono-num text-xs font-bold text-blue-400">{apr.requestNo}</span>
+                      <span className="font-mono-num text-xs font-bold text-[#1E3FAE]">{apr.requestNo}</span>
                       <StatusBadge status={apr.type} />
                       <StatusBadge status={apr.status} />
                     </div>
                     <h3 className="text-base font-bold text-[var(--text-primary)] mt-1">{apr.title}</h3>
                     <p className="text-xs text-[var(--text-secondary)]">
                       Requested by <strong>{apr.requestedBy}</strong> · Ref {apr.referenceNo} ·{" "}
-                      <strong className="font-mono-num text-emerald-400">{formatUSD(apr.amount)}</strong>
+                      <strong className="font-mono-num text-[#05603F]">{formatUSD(apr.amount)}</strong>
                     </p>
                   </div>
                   {apr.status === "Pending" && (
@@ -151,7 +151,7 @@ export function OperationsWorkforceModule({
                           })
                         }
                       >
-                        <XCircle className="h-4 w-4 text-rose-400" /> Reject
+                        <XCircle className="h-4 w-4 text-[#A11A1A]" /> Reject
                       </SecondaryButton>
                     </div>
                   )}
@@ -167,9 +167,9 @@ export function OperationsWorkforceModule({
                         key={st}
                         className={`rounded-xl border px-3 py-2 text-center text-xs font-semibold ${
                           done
-                            ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                            ? "border-[#B5E5CF] bg-[#E3F5EC] text-[#05603F]"
                             : current
-                              ? "border-blue-500/60 bg-blue-500/20 text-blue-200 animate-pulse"
+                              ? "border-[#111317] bg-blue-500/20 text-[#1E3FAE] animate-pulse"
                               : "border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-muted)]"
                         }`}
                       >
@@ -211,7 +211,7 @@ export function OperationsWorkforceModule({
                 <GlassCard key={b.id} hover>
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="font-mono-num text-[11px] font-bold text-blue-400">{b.code} · {b.type}</span>
+                      <span className="font-mono-num text-[11px] font-bold text-[#1E3FAE]">{b.code} · {b.type}</span>
                       <h3 className="text-base font-bold text-[var(--text-primary)] mt-0.5">{b.name}</h3>
                       <p className="text-xs text-[var(--text-muted)]">{b.city}, {b.state} · Mgr: {b.managerName}</p>
                     </div>
@@ -220,7 +220,7 @@ export function OperationsWorkforceModule({
                   <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[var(--bg-elevated)] p-3 text-xs border border-[var(--border-subtle)]">
                     <div>
                       <p className="text-[10px] uppercase text-[var(--text-muted)]">Active Invoiced</p>
-                      <p className="font-mono-num font-bold text-emerald-400">{formatUSD(branchSales)}</p>
+                      <p className="font-mono-num font-bold text-[#05603F]">{formatUSD(branchSales)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] uppercase text-[var(--text-muted)]">Monthly Target</p>
@@ -229,7 +229,7 @@ export function OperationsWorkforceModule({
                   </div>
                   <div className="mt-3 text-xs text-[var(--text-secondary)]">
                     <p className="font-semibold text-[var(--text-primary)] mb-1 flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5 text-blue-400" /> Attached Warehouses ({branchWarehouses.length})
+                      <Building2 className="h-3.5 w-3.5 text-[#1E3FAE]" /> Attached Warehouses ({branchWarehouses.length})
                     </p>
                     {branchWarehouses.map((w) => (
                       <p key={w.id} className="text-[11px] text-[var(--text-muted)]">
@@ -269,16 +269,16 @@ export function OperationsWorkforceModule({
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)]">
                   {state.employees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-blue-500/5">
+                    <tr key={emp.id} className="hover:bg-[#F8F7F3]">
                       <td className="px-4 py-3">
                         <p className="font-bold text-[var(--text-primary)]">{emp.name}</p>
-                        <p className="font-mono-num text-[11px] text-blue-400">{emp.employeeCode} · {emp.email}</p>
+                        <p className="font-mono-num text-[11px] text-[#1E3FAE]">{emp.employeeCode} · {emp.email}</p>
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium">{emp.jobRole}</p>
                         <p className="text-[11px] text-[var(--text-muted)]">{emp.department}</p>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-400 font-semibold">
+                      <td className="px-4 py-3 text-right font-mono-num text-[#05603F] font-semibold">
                         {emp.attendanceRate}%
                       </td>
                       <td className="px-4 py-3 text-right font-mono-num font-bold">
@@ -287,7 +287,7 @@ export function OperationsWorkforceModule({
                       <td className="px-4 py-3">
                         {emp.isSalesRep ? `${emp.commissionType} (${emp.commissionRate}%)` : "Salaried"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num font-bold text-amber-400">
+                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#7F4505]">
                         {formatUSD(emp.commissionEarned)}
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={emp.commissionStatus} /></td>
@@ -300,7 +300,7 @@ export function OperationsWorkforceModule({
                                 status: emp.commissionStatus === "Pending" ? "Approved" : "Paid",
                               })
                             }
-                            className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25 cursor-pointer"
+                            className="rounded-lg bg-[#E3F5EC] px-2.5 py-1 text-[11px] font-semibold text-[#05603F] hover:bg-emerald-500/25 cursor-pointer"
                           >
                             {emp.commissionStatus === "Pending" ? "Approve" : "Mark Paid"}
                           </button>
@@ -321,7 +321,7 @@ export function OperationsWorkforceModule({
           <GlassCard className="lg:col-span-7 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <FileArchive className="h-4 w-4 text-blue-400" /> Enterprise Document Vault
+                <FileArchive className="h-4 w-4 text-[#1E3FAE]" /> Enterprise Document Vault
               </h3>
               <SecondaryButton onClick={() => setDocOpen(true)} className="py-1.5 px-3 text-xs">
                 <Plus className="h-3.5 w-3.5" /> Attach Document
@@ -344,14 +344,14 @@ export function OperationsWorkforceModule({
                       <a
                         href={doc.fileDataUrl}
                         download={doc.fileName}
-                        className="rounded-lg bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-400 hover:bg-blue-500/25"
+                        className="rounded-lg bg-[#E6EDFD] px-2.5 py-1 text-[11px] font-semibold text-[#1E3FAE] hover:bg-blue-500/25"
                       >
                         Download
                       </a>
                     )}
                     <button
                       onClick={() => onRunAction("document:delete", { documentId: doc.id })}
-                      className="rounded-lg bg-rose-500/15 px-2 py-1 text-[11px] font-semibold text-rose-400 hover:bg-rose-500/25 cursor-pointer"
+                      className="rounded-lg bg-[#FCE8E8] px-2 py-1 text-[11px] font-semibold text-[#A11A1A] hover:bg-rose-500/25 cursor-pointer"
                     >
                       Delete
                     </button>
@@ -361,7 +361,7 @@ export function OperationsWorkforceModule({
             </div>
 
             <div className="pt-4 border-t border-[var(--border-subtle)] space-y-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#1E3FAE] flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5" /> Automated Email Dispatch Log
               </h4>
               {state.emailLogs.slice(0, 5).map((em) => (
@@ -378,7 +378,7 @@ export function OperationsWorkforceModule({
 
           <GlassCard className="lg:col-span-5 space-y-4">
             <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
-              <Upload className="h-4 w-4 text-emerald-400" /> Bulk CSV / Excel Import & Export
+              <Upload className="h-4 w-4 text-[#05603F]" /> Bulk CSV / Excel Import & Export
             </h3>
             <div className="flex gap-2">
               <button
@@ -389,7 +389,7 @@ export function OperationsWorkforceModule({
                   );
                 }}
                 className={`flex-1 rounded-lg py-1.5 text-xs font-semibold cursor-pointer ${
-                  importTarget === "products" ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+                  importTarget === "products" ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
                 }`}
               >
                 Import Products
@@ -402,7 +402,7 @@ export function OperationsWorkforceModule({
                   );
                 }}
                 className={`flex-1 rounded-lg py-1.5 text-xs font-semibold cursor-pointer ${
-                  importTarget === "customers" ? "bg-blue-600 text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
+                  importTarget === "customers" ? "bg-[#111317] text-white" : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
                 }`}
               >
                 Import Customers & Balances
@@ -446,13 +446,13 @@ export function OperationsWorkforceModule({
             <GlassCard key={item.id} className="flex flex-col justify-between space-y-4">
               <div>
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#1E3FAE]">
                     {item.category}
                   </span>
                   <StatusBadge status={item.status} />
                 </div>
                 <h3 className="text-sm font-bold text-[var(--text-primary)] mt-1 flex items-center gap-1.5">
-                  <PlugZap className="h-4 w-4 text-blue-400" /> {item.name}
+                  <PlugZap className="h-4 w-4 text-[#1E3FAE]" /> {item.name}
                 </h3>
                 <p className="text-xs text-[var(--text-secondary)] mt-1.5">{item.description}</p>
                 <p className="text-[10px] font-mono-num text-[var(--text-muted)] mt-2 truncate">
@@ -469,7 +469,7 @@ export function OperationsWorkforceModule({
                 {item.category === "Hardware" && (
                   <button
                     onClick={() => window.print()}
-                    className="text-xs text-blue-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-[#1E3FAE] hover:underline inline-flex items-center gap-1 cursor-pointer"
                   >
                     <Printer className="h-3.5 w-3.5" /> Test Print
                   </button>
