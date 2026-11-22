@@ -24,7 +24,6 @@ import {
   Send,
   CheckCircle2,
   AlertCircle,
-  GitBranch,
 } from "lucide-react";
 import type { SafeUser } from "@/types/erp";
 import { formatUSD, formatUSDate } from "@/lib/utils";
@@ -418,9 +417,8 @@ export function EnterpriseShell() {
       { id: "purchasing", label: "Purchasing", icon: Truck },
     ],
     [
-      { id: "operations", label: "Workflow", icon: GitBranch, badge: badges.pendingApprovals },
       { id: "analytics", label: "Reports", icon: BarChart3 },
-      { id: "admin", label: "Admin", icon: ShieldCheck },
+      { id: "admin", label: "Admin", icon: ShieldCheck, badge: badges.pendingApprovals },
     ],
   ];
 
@@ -712,21 +710,21 @@ export function EnterpriseShell() {
                   }}
                 />
               )}
-              {activeTab === "operations" && (
-                <OperationsWorkforceModule
-                  state={state}
-                  onRunAction={async (a, p) => {
-                    await runAction(a, p);
-                  }}
-                />
-              )}
               {activeTab === "analytics" && <AnalyticsAIModule state={state} />}
               {activeTab === "admin" && (
-                <AdminSecurityModule
-                  state={state}
-                  storageMode={storageMode}
-                  onRunAction={runAction}
-                />
+                <div className="space-y-8">
+                  <AdminSecurityModule
+                    state={state}
+                    storageMode={storageMode}
+                    onRunAction={runAction}
+                  />
+                  <OperationsWorkforceModule
+                    state={state}
+                    onRunAction={async (a, p) => {
+                      await runAction(a, p);
+                    }}
+                  />
+                </div>
               )}
             </motion.div>
           </AnimatePresence>

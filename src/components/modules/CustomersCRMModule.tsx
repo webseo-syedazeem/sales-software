@@ -1,31 +1,35 @@
 ﻿"use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Users,
   Plus,
   Search,
   Phone,
   Mail,
-  Building2,
-  CalendarClock,
-  MessageSquarePlus,
+  BookOpen,
+  User,
+  Star,
   Download,
-  Award,
-  AlertCircle,
 } from "lucide-react";
 import type { Customer } from "@/types/erp";
 import type { ClientERPState } from "./ExecutiveDashboard";
 import { exportToCSV, formatUSD, formatUSDate } from "@/lib/utils";
 import {
   GlassCard,
-  KpiTile,
   Modal,
   PrimaryButton,
   SecondaryButton,
   SectionHeader,
   StatusBadge,
 } from "@/components/ui/Primitives";
+
+const AVATAR_TONES = [
+  { bg: "#E6EDFD", fg: "#1E3FAE" },
+  { bg: "#EEF6DA", fg: "#3D5A0A" },
+  { bg: "#FDF0DC", fg: "#7F4505" },
+  { bg: "#E3F5EC", fg: "#05603F" },
+  { bg: "#FCE8E8", fg: "#A11A1A" },
+];
 
 export function CustomersCRMModule({
   state,
@@ -38,70 +42,57 @@ export function CustomersCRMModule({
 }) {
   const [search, setSearch] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("All");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(state.customers[0]?.id || "");
+  const [detailTab, setDetailTab] = useState<"profile" | "timeline" | "tasks" | "transactions">("profile");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Customer>>({});
   const [taskTitle, setTaskTitle] = useState("");
-  const [taskDue, setTaskDue] = useState("2026-11-28");
+  const [taskDue, setTaskDue] = useState(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
   const [noteText, setNoteText] = useState("");
   const [noteChannel, setNoteChannel] = useState<"Phone" | "Email" | "In-Person" | "SMS" | "Note">("Phone");
 
-  const selected = state.customers.find((c) => c.id === selectedId) || null;
+  useEffect(() => {
+    if (!selectedId && state.customers[0]) {
+      setSelectedId(state.customers[0].id);
+    }
+  }, [state.customers, selectedId]);
 
   const filtered = state.customers.filter((c) => {
     const matchSeg = segmentFilter === "All" || c.segment === segmentFilter;
     const q = search.toLowerCase();
-    const matchQ =
-      !q ||
-      c.companyName.toLowerCase().includes(q) ||
-      c.contactPerson.toLowerCase().includes(q) ||
-      c.customerCode.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q);
-    return matchSeg && matchQ;
+    return (
+      matchSeg &&
+      (!q ||
+        c.companyName.toLowerCase().includes(q) ||
+        c.contactPerson.toLowerCase().includes(q) ||
+        c.customerCode.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q))
+    );
   });
 
-  const vipCount = state.customers.filter((c) => c.segment === "VIP").length;
-  const atRiskCount = state.customers.filter((c) => c.segment === "At-Risk").length;
-  const totalOpenBalances = state.customers.reduce((s, c) => s + c.currentBalance, 0);
-  const openTasks = state.customers.reduce(
-    (s, c) => s + c.tasks.filter((t) => t.status === "Open").length,
-    0
-  );
-
-  const handleSaveCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await onRunAction("customer:save", editing as Record<string, unknown>);
-    setFormOpen(false);
-  };
+  const selected = state.customers.find((c) => c.id === selectedId) || filtered[0] || null;
+  const selectedInvoices = selected ? state.invoices.filter((i) => i.customerId === selected.id) : [];
+  const lifetimeSales = selectedInvoices
+    .filter((i) => i.status !== "Cancelled")
+    .reduce((s, i) => s + i.total, 0);
+  const aov = selectedInvoices.length > 0 ? lifetimeSales / selectedInvoices.length : 0;
+  const utilPct = selected
+    ? Math.min(100, Math.round((selected.currentBalance / Math.max(1, selected.creditLimit)) * 100))
+    : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <SectionHeader
-        badge="Enterprise Customer Master & CRM"
-        title="Customers, Credit Control & CRM"
-        subtitle="Complete US B2B customer database with credit limit monitoring, tax-exempt certificates, VIP segmentation, follow-ups, tasks, and communication timelines."
+        title="Customers"
+        subtitle="Complete customer database with balances, credit limit control, activity timelines, and CRM follow-ups."
         actions={
           <>
             <SecondaryButton
               onClick={() =>
-                exportToCSV(
-                  "apexledger-customers.csv",
-                  state.customers.map((c) => ({
-                    Code: c.customerCode,
-                    Company: c.companyName,
-                    Contact: c.contactPerson,
-                    Phone: c.phone,
-                    Email: c.email,
-                    State: c.state,
-                    Segment: c.segment,
-                    Terms: c.paymentTerms,
-                    CreditLimit: c.creditLimit,
-                    CurrentBalance: c.currentBalance,
-                  }))
-                )
+                exportToCSV("nexora-customers.csv", state.customers as unknown as Record<string, unknown>[])
               }
             >
-              <Download className="h-4 w-4" /> Export CSV
+              <Download className="h-4 w-4" /> Export
             </SecondaryButton>
             <PrimaryButton
               onClick={() => {
@@ -110,7 +101,7 @@ export function CustomersCRMModule({
                   contactPerson: "",
                   phone: "+1 ",
                   email: "",
-                  state: "NY",
+                  state: state.settings.defaultTaxState || "NY",
                   customerType: "B2B Enterprise",
                   segment: "Standard",
                   paymentTerms: "Net 30",
@@ -123,333 +114,367 @@ export function CustomersCRMModule({
                 setFormOpen(true);
               }}
             >
-              <Plus className="h-4 w-4" /> New Customer
+              <Plus className="h-4 w-4" /> Add customer
             </PrimaryButton>
           </>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile label="Total Customers" value={String(state.customers.length)} sublabel={`${vipCount} VIP Accounts`} icon={<Users className="h-5 w-5" />} tone="blue" />
-        <KpiTile label="Open Ledger Balances" value={formatUSD(totalOpenBalances)} sublabel="Across all US accounts" icon={<Building2 className="h-5 w-5" />} tone="emerald" />
-        <KpiTile label="Active CRM Follow-Ups" value={String(openTasks)} sublabel="Calls, quotes & reminders" icon={<CalendarClock className="h-5 w-5" />} tone="indigo" />
-        <KpiTile label="At-Risk Credit Accounts" value={String(atRiskCount)} delta={atRiskCount > 0 ? "Review Limit" : "Clear"} positive={atRiskCount === 0} icon={<AlertCircle className="h-5 w-5" />} tone="rose" />
-      </div>
-
-      {/* Filters */}
-      <GlassCard className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-muted)]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search company, contact person, code, or email..."
-            className="erp-input pl-9"
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {["All", "VIP", "High-Value", "Standard", "At-Risk"].map((seg) => (
-            <button
-              key={seg}
-              onClick={() => setSegmentFilter(seg)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold cursor-pointer ${
-                segmentFilter === seg
-                  ? "bg-[#111317] text-white"
-                  : "bg-[var(--bg-elevated)] text-[var(--text-secondary)]"
-              }`}
-            >
-              {seg}
-            </button>
-          ))}
-        </div>
-      </GlassCard>
-
-      {/* Customer Cards */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {filtered.map((c) => {
-          const util = Math.min(100, Math.round((c.currentBalance / Math.max(1, c.creditLimit)) * 100));
-          return (
-            <GlassCard key={c.id} hover onClick={() => setSelectedId(c.id)}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono-num text-[11px] font-bold text-[#1E3FAE]">
-                      {c.customerCode}
-                    </span>
-                    {c.taxExempt && (
-                      <span className="rounded bg-[#E6EDFD] px-1.5 py-0.5 text-[10px] font-semibold text-[#1E3FAE]">
-                        Tax-Exempt
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-base font-bold text-[var(--text-primary)] mt-0.5">
-                    {c.companyName}
-                  </h3>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    {c.contactPerson} · {c.customerType} ({c.state})
-                  </p>
-                </div>
-                <StatusBadge status={c.segment} />
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-4 text-xs text-[var(--text-muted)]">
-                <span className="inline-flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {c.phone}</span>
-                <span className="inline-flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {c.email}</span>
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)] text-xs">
-                <div>
-                  <p className="text-[10px] uppercase text-[var(--text-muted)]">Current Balance</p>
-                  <p className="font-mono-num font-bold text-[#7F4505]">{formatUSD(c.currentBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-[var(--text-muted)]">Credit Limit</p>
-                  <p className="font-mono-num font-bold text-[var(--text-primary)]">{formatUSD(c.creditLimit)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase text-[var(--text-muted)]">Terms</p>
-                  <p className="font-semibold text-[#1E3FAE]">{c.paymentTerms}</p>
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-[var(--text-muted)]">Credit Utilization</span>
-                  <span className={`font-mono-num font-bold ${util > 85 ? "text-[#A11A1A]" : "text-[#05603F]"}`}>
-                    {util}%
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-[#ECEAE4] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${util > 85 ? "bg-rose-500" : util > 65 ? "bg-amber-500" : "bg-blue-500"}`}
-                    style={{ width: `${util}%` }}
-                  />
-                </div>
-              </div>
-            </GlassCard>
-          );
-        })}
-      </div>
-
-      {/* Customer 360° CRM Modal */}
-      <Modal
-        open={Boolean(selected)}
-        onClose={() => setSelectedId(null)}
-        title={selected ? `${selected.companyName} (${selected.customerCode})` : ""}
-        subtitle={selected ? `${selected.contactPerson} · EIN/Tax ID: ${selected.taxId || "N/A"} · ${selected.paymentTerms}` : ""}
-        maxWidth="max-w-4xl"
-      >
-        {selected && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)]">
-                <p className="text-[var(--text-muted)] uppercase text-[10px]">Billing Address</p>
-                <p className="mt-1 text-[var(--text-primary)]">{selected.billingAddress}</p>
-              </div>
-              <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)]">
-                <p className="text-[var(--text-muted)] uppercase text-[10px]">Shipping Address</p>
-                <p className="mt-1 text-[var(--text-primary)]">{selected.shippingAddress}</p>
-              </div>
-              <div className="rounded-xl bg-[var(--bg-elevated)] p-3 border border-[var(--border-subtle)] flex flex-col justify-between">
-                <div>
-                  <p className="text-[var(--text-muted)] uppercase text-[10px]">Open Ledger Balance</p>
-                  <p className="mt-1 text-lg font-bold font-mono-num text-[#7F4505]">
-                    {formatUSD(selected.currentBalance)}
-                  </p>
-                </div>
+      {/* Exact Nexora Split-View CRM Layout */}
+      <div className="flex flex-wrap gap-4 items-start">
+        {/* Left Searchable Customer List */}
+        <GlassCard className="flex-1 basis-[320px] min-w-0 p-0 overflow-hidden">
+          <div className="p-4 space-y-3 border-b border-[#EEECE7]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#5F636C]" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, ID, contact…"
+                className="erp-input pl-9"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {["All", "VIP", "High-Value", "Standard", "At-Risk"].map((seg) => (
                 <button
-                  onClick={() => {
-                    setSelectedId(null);
-                    onNavigate("ledger");
-                  }}
-                  className="text-left text-[#1E3FAE] font-semibold hover:underline cursor-pointer mt-1"
+                  key={seg}
+                  onClick={() => setSegmentFilter(seg)}
+                  className={`min-h-[30px] px-2.5 rounded-[8px] border text-[12px] font-semibold cursor-pointer ${
+                    segmentFilter === seg
+                      ? "bg-[#111317] border-[#111317] text-white"
+                      : "bg-white border-[#E0DDD5] text-[#4A4E57]"
+                  }`}
                 >
-                  Open Full Customer Ledger →
+                  {seg}
                 </button>
-              </div>
-            </div>
-
-            {/* CRM Follow-ups & Communications */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1E3FAE] flex items-center gap-1.5">
-                  <CalendarClock className="h-3.5 w-3.5" /> Follow-ups & Reminders
-                </h4>
-                <div className="space-y-2">
-                  {selected.tasks.length === 0 && (
-                    <p className="text-xs text-[var(--text-muted)]">No open tasks scheduled.</p>
-                  )}
-                  {selected.tasks.map((t) => (
-                    <div key={t.id} className="rounded-lg bg-[#F6F5F1] border border-[#EEECE7] p-2.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="font-semibold text-[var(--text-primary)]">{t.title}</span>
-                        <StatusBadge status={t.priority} />
-                      </div>
-                      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                        Due {formatUSDate(t.dueDate)} · {t.assignedTo}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t border-[var(--border-subtle)] flex gap-2">
-                  <input
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    placeholder="Add reminder or follow-up..."
-                    className="erp-input text-xs"
-                  />
-                  <input
-                    type="date"
-                    value={taskDue}
-                    onChange={(e) => setTaskDue(e.target.value)}
-                    className="erp-input text-xs w-36"
-                  />
-                  <PrimaryButton
-                    onClick={async () => {
-                      if (!taskTitle.trim()) return;
-                      await onRunAction("customer:task", {
-                        customerId: selected.id,
-                        title: taskTitle,
-                        dueDate: taskDue,
-                        priority: "High",
-                        type: "Follow-up",
-                      });
-                      setTaskTitle("");
-                    }}
-                    className="px-3 py-1.5 text-xs"
-                  >
-                    Add
-                  </PrimaryButton>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-4 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#05603F] flex items-center gap-1.5">
-                  <MessageSquarePlus className="h-3.5 w-3.5" /> Communication Timeline
-                </h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {selected.communications.length === 0 && (
-                    <p className="text-xs text-[var(--text-muted)]">No communication logs yet.</p>
-                  )}
-                  {selected.communications.map((cm) => (
-                    <div key={cm.id} className="rounded-lg bg-[#F6F5F1] border border-[#EEECE7] p-2.5 text-xs">
-                      <div className="flex justify-between text-[11px] text-[var(--text-muted)]">
-                        <span className="font-semibold text-[#1E3FAE]">{cm.channel} · {cm.author}</span>
-                        <span>{formatUSDate(cm.date)}</span>
-                      </div>
-                      <p className="mt-1 text-[var(--text-primary)]">{cm.summary}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-2 border-t border-[var(--border-subtle)] flex gap-2">
-                  <select
-                    value={noteChannel}
-                    onChange={(e) => setNoteChannel(e.target.value as typeof noteChannel)}
-                    className="erp-input text-xs w-28"
-                  >
-                    <option value="Phone">Phone</option>
-                    <option value="Email">Email</option>
-                    <option value="In-Person">Meeting</option>
-                    <option value="Note">Note</option>
-                  </select>
-                  <input
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="Log call outcome or sales note..."
-                    className="erp-input text-xs"
-                  />
-                  <PrimaryButton
-                    onClick={async () => {
-                      if (!noteText.trim()) return;
-                      await onRunAction("customer:note", {
-                        customerId: selected.id,
-                        channel: noteChannel,
-                        summary: noteText,
-                      });
-                      setNoteText("");
-                    }}
-                    className="px-3 py-1.5 text-xs"
-                  >
-                    Log
-                  </PrimaryButton>
-                </div>
-              </div>
-            </div>
-
-            {/* Outstanding Invoices */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2 flex items-center gap-1.5">
-                <Award className="h-3.5 w-3.5 text-[#7F4505]" /> Invoices & Transaction History
-              </h4>
-              <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[var(--bg-elevated)] text-[var(--text-muted)]">
-                    <tr>
-                      <th className="px-3 py-2">Invoice #</th>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Due Date</th>
-                      <th className="px-3 py-2 text-right">Total</th>
-                      <th className="px-3 py-2 text-right">Balance Due</th>
-                      <th className="px-3 py-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-subtle)]">
-                    {state.invoices
-                      .filter((i) => i.customerId === selected.id)
-                      .map((inv) => (
-                        <tr key={inv.id}>
-                          <td className="px-3 py-2 font-mono-num text-[#1E3FAE] font-semibold">{inv.invoiceNo}</td>
-                          <td className="px-3 py-2">{formatUSDate(inv.issueDate)}</td>
-                          <td className="px-3 py-2">{formatUSDate(inv.dueDate)}</td>
-                          <td className="px-3 py-2 text-right font-mono-num">{formatUSD(inv.total)}</td>
-                          <td className="px-3 py-2 text-right font-mono-num font-bold text-[#7F4505]">{formatUSD(inv.balanceDue)}</td>
-                          <td className="px-3 py-2 text-right"><StatusBadge status={inv.status} /></td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+              ))}
             </div>
           </div>
-        )}
-      </Modal>
 
-      {/* New Customer Modal */}
+          <div className="p-2 max-h-[760px] overflow-y-auto space-y-1">
+            {filtered.length === 0 && (
+              <p className="text-center py-8 text-[13px] text-[#5F636C]">
+                No customers yet. Click <b>Add customer</b> to create your first account.
+              </p>
+            )}
+            {filtered.map((c, idx) => {
+              const on = selected?.id === c.id;
+              const tone = AVATAR_TONES[idx % AVATAR_TONES.length];
+              const ini = c.companyName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setSelectedId(c.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-[12px] border text-left cursor-pointer transition-colors ${
+                    on
+                      ? "border-[#111317] bg-[#F3F8E6]"
+                      : "border-transparent bg-white hover:bg-[#FAF9F6]"
+                  }`}
+                >
+                  <span
+                    className="w-[42px] h-[42px] rounded-[12px] font-bold text-[13.5px] flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: tone.bg, color: tone.fg }}
+                  >
+                    {ini}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-[13.5px] text-[#111317] truncate">{c.companyName}</div>
+                    <div className="text-[12px] text-[#5F636C]">{c.customerCode} · {c.state}</div>
+                  </div>
+                  <div className="text-right shrink-0 space-y-1">
+                    <div className="num font-bold text-[13px] text-[#111317]">{formatUSD(c.currentBalance)}</div>
+                    <StatusBadge status={c.segment} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </GlassCard>
+
+        {/* Right Customer 360° Panel */}
+        <div className="flex-[2.4] basis-[640px] min-w-0 space-y-4">
+          {!selected ? (
+            <GlassCard className="p-12 text-center space-y-3">
+              <h2 className="h text-[18px] font-bold text-[#111317]">Select or add a customer</h2>
+              <p className="text-[13.5px] text-[#5F636C]">
+                Manage credit limits, tax exemptions, follow-up tasks, communication logs, and live ledgers.
+              </p>
+              <PrimaryButton onClick={() => setFormOpen(true)}>
+                <Plus className="h-4 w-4" /> Add first customer
+              </PrimaryButton>
+            </GlassCard>
+          ) : (
+            <>
+              <GlassCard className="p-6">
+                <div className="flex flex-wrap gap-4 items-start">
+                  <span className="w-[64px] h-[64px] rounded-[16px] bg-[#E6EDFD] text-[#1E3FAE] h font-bold text-[22px] flex items-center justify-center shrink-0">
+                    {selected.companyName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="flex-1 min-w-[240px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="h text-[22px] font-bold text-[#111317] m-0">{selected.companyName}</h2>
+                      <StatusBadge status={selected.segment} />
+                      <span className="rounded-[6px] bg-[#EEECE7] text-[#4A4E57] px-2 py-0.5 text-[11.5px] font-semibold">
+                        {selected.customerType}
+                      </span>
+                    </div>
+                    <p className="text-[13.5px] text-[#5F636C] mt-1">
+                      {selected.customerCode} · {selected.category} · {selected.paymentTerms}
+                    </p>
+                    <div className="flex flex-wrap gap-4 mt-2.5 text-[13px] text-[#334155]">
+                      <span className="inline-flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> {selected.contactPerson}</span>
+                      {selected.phone && <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> {selected.phone}</span>}
+                      {selected.email && <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> {selected.email}</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <SecondaryButton onClick={() => onNavigate("ledger")}>
+                      <BookOpen className="h-4 w-4" /> Ledger
+                    </SecondaryButton>
+                    <PrimaryButton onClick={() => onNavigate("sales")}>
+                      <Plus className="h-4 w-4" /> New order
+                    </PrimaryButton>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+                  <div className="p-3.5 rounded-[12px] bg-[#F6F5F1]">
+                    <div className="text-[12px] text-[#5F636C] font-semibold">Lifetime sales</div>
+                    <div className="h num text-[19px] font-bold mt-1">{formatUSD(lifetimeSales)}</div>
+                  </div>
+                  <div className="p-3.5 rounded-[12px] bg-[#F6F5F1]">
+                    <div className="text-[12px] text-[#5F636C] font-semibold">Current balance</div>
+                    <div className="h num text-[19px] font-bold mt-1">{formatUSD(selected.currentBalance)}</div>
+                  </div>
+                  <div className="p-3.5 rounded-[12px] bg-[#F6F5F1]">
+                    <div className="text-[12px] text-[#5F636C] font-semibold">Avg. order value</div>
+                    <div className="h num text-[19px] font-bold mt-1">{formatUSD(aov)}</div>
+                  </div>
+                  <div className="p-3.5 rounded-[12px] bg-[#F6F5F1]">
+                    <div className="text-[12px] text-[#5F636C] font-semibold">Open tasks</div>
+                    <div className="h num text-[19px] font-bold mt-1">
+                      {selected.tasks.filter((t) => t.status === "Open").length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between text-[13px] mb-1.5">
+                    <span className="font-semibold text-[#111317]">Credit limit utilization</span>
+                    <span className="num text-[#4A4E57]">
+                      {formatUSD(selected.currentBalance)} of {formatUSD(selected.creditLimit)} · <b>{utilPct}%</b>
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-[#ECEAE4] overflow-hidden">
+                    <div
+                      className="nexora-barx h-full rounded-full"
+                      style={{
+                        width: `${utilPct}%`,
+                        backgroundColor: utilPct > 85 ? "#A11A1A" : utilPct > 65 ? "#D97706" : "#16181D",
+                      }}
+                    />
+                  </div>
+                </div>
+              </GlassCard>
+
+              <div className="inline-flex flex-wrap gap-1 p-[3px] rounded-[10px] bg-[#E9E6DF]">
+                {(
+                  [
+                    ["profile", "Profile & tax"],
+                    ["timeline", "Activity timeline"],
+                    ["tasks", `Follow-ups & tasks (${selected.tasks.length})`],
+                    ["transactions", `Invoices (${selectedInvoices.length})`],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setDetailTab(k)}
+                    className={`min-h-[32px] px-3.5 rounded-[8px] text-[13px] font-semibold cursor-pointer ${
+                      detailTab === k ? "bg-white text-[#111317] shadow-sm" : "text-[#5F636C]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {detailTab === "profile" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <GlassCard>
+                    <h3 className="h text-[15px] font-bold mb-3">Addresses</h3>
+                    <div className="space-y-3 text-[13.5px]">
+                      <div>
+                        <div className="text-[11.5px] font-semibold text-[#5F636C]">Billing address</div>
+                        <div className="mt-0.5 text-[#111317]">{selected.billingAddress || "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11.5px] font-semibold text-[#5F636C]">Shipping address</div>
+                        <div className="mt-0.5 text-[#111317]">{selected.shippingAddress || "—"}</div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                  <GlassCard>
+                    <h3 className="h text-[15px] font-bold mb-3">Tax &amp; terms</h3>
+                    <div className="grid grid-cols-2 gap-y-2 text-[13.5px]">
+                      <span className="text-[#5F636C]">Tax ID (EIN)</span><span className="num font-semibold">{selected.taxId || "—"}</span>
+                      <span className="text-[#5F636C]">Tax status</span><span className="font-semibold">{selected.taxExempt ? "Tax-Exempt Resale" : `Taxable (${selected.state})`}</span>
+                      <span className="text-[#5F636C]">Payment terms</span><span>{selected.paymentTerms}</span>
+                      <span className="text-[#5F636C]">Opening balance</span><span className="num">{formatUSD(selected.openingBalance)}</span>
+                    </div>
+                  </GlassCard>
+                </div>
+              )}
+
+              {detailTab === "timeline" && (
+                <GlassCard className="space-y-4">
+                  <h3 className="h text-[15px] font-bold">Customer activity &amp; communication log</h3>
+                  <div className="flex gap-2">
+                    <select value={noteChannel} onChange={(e) => setNoteChannel(e.target.value as typeof noteChannel)} className="erp-input w-28 text-[13px]">
+                      <option value="Phone">Phone</option>
+                      <option value="Email">Email</option>
+                      <option value="In-Person">Meeting</option>
+                      <option value="Note">Note</option>
+                    </select>
+                    <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Log call, email, or negotiation note..." className="erp-input" />
+                    <PrimaryButton
+                      onClick={async () => {
+                        if (!noteText.trim()) return;
+                        await onRunAction("customer:note", { customerId: selected.id, channel: noteChannel, summary: noteText });
+                        setNoteText("");
+                      }}
+                    >
+                      Log
+                    </PrimaryButton>
+                  </div>
+                  <div className="relative pl-6 space-y-4">
+                    <div className="absolute left-[7px] top-2 bottom-2 w-[2px] bg-[#E0DDD5]" />
+                    {selected.communications.length === 0 && (
+                      <p className="text-[13px] text-[#5F636C]">No communication entries yet.</p>
+                    )}
+                    {selected.communications.map((cm) => (
+                      <div key={cm.id} className="relative">
+                        <span className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full bg-white border-[3px] border-[#16181D]" />
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <b>{cm.channel}</b>
+                          <span className="text-[#5F636C]">by {cm.author}</span>
+                          <span className="ml-auto text-[12px] text-[#5F636C]">{formatUSDate(cm.date)}</span>
+                        </div>
+                        <p className="text-[13.5px] text-[#334155] mt-1">{cm.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                </GlassCard>
+              )}
+
+              {detailTab === "tasks" && (
+                <GlassCard className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="h text-[15px] font-bold">Follow-ups, tasks &amp; reminders</h3>
+                    <span className="rounded-[6px] bg-[#EEF6DA] text-[#3D5A0A] px-2 py-0.5 text-[11.5px] font-semibold">
+                      {selected.tasks.length} total
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Add follow-up, e.g. Call about Q1 Acrylic pricing" className="erp-input flex-1 min-w-[200px]" />
+                    <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} className="erp-input w-40" />
+                    <PrimaryButton
+                      onClick={async () => {
+                        if (!taskTitle.trim()) return;
+                        await onRunAction("customer:task", { customerId: selected.id, title: taskTitle, dueDate: taskDue, priority: "High", type: "Follow-up" });
+                        setTaskTitle("");
+                      }}
+                    >
+                      <Plus className="h-4 w-4" /> Add
+                    </PrimaryButton>
+                  </div>
+                  <div className="space-y-2">
+                    {selected.tasks.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between p-3 rounded-[12px] border border-[#EEECE7] bg-[#FAF9F6]">
+                        <div>
+                          <div className="font-semibold text-[13.5px] text-[#111317]">{t.title}</div>
+                          <div className="text-[12px] text-[#5F636C]">{t.assignedTo} · Due {formatUSDate(t.dueDate)}</div>
+                        </div>
+                        <StatusBadge status={t.priority} />
+                      </div>
+                    ))}
+                  </div>
+                </GlassCard>
+              )}
+
+              {detailTab === "transactions" && (
+                <GlassCard className="p-0 overflow-hidden">
+                  <table className="w-full text-left text-[13px]">
+                    <thead className="bg-[#F8F7F3] text-[#6B6F78] uppercase text-[11px] border-b border-[#E6E3DC]">
+                      <tr>
+                        <th className="px-4 py-2.5">Invoice #</th>
+                        <th className="px-4 py-2.5">Issue</th>
+                        <th className="px-4 py-2.5">Due</th>
+                        <th className="px-4 py-2.5 text-right">Total</th>
+                        <th className="px-4 py-2.5 text-right">Balance</th>
+                        <th className="px-4 py-2.5 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#EEECE7]">
+                      {selectedInvoices.map((inv) => (
+                        <tr key={inv.id}>
+                          <td className="px-4 py-2.5 num font-bold">{inv.invoiceNo}</td>
+                          <td className="px-4 py-2.5">{formatUSDate(inv.issueDate)}</td>
+                          <td className="px-4 py-2.5">{formatUSDate(inv.dueDate)}</td>
+                          <td className="px-4 py-2.5 text-right num">{formatUSD(inv.total)}</td>
+                          <td className="px-4 py-2.5 text-right num font-bold text-[#7F4505]">{formatUSD(inv.balanceDue)}</td>
+                          <td className="px-4 py-2.5 text-right"><StatusBadge status={inv.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </GlassCard>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Add Customer Modal */}
       <Modal
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title="Register Enterprise Customer"
-        subtitle="Creates customer master profile, US tax settings, credit limit, and optional opening ledger balance."
+        title="Add enterprise customer"
+        subtitle="Creates customer profile, US tax rules, credit limit, and optional opening ledger balance."
       >
-        <form onSubmit={handleSaveCustomer} className="space-y-4">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await onRunAction("customer:save", editing as Record<string, unknown>);
+            setFormOpen(false);
+          }}
+          className="space-y-3.5"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Company Name *</label>
-              <input required value={editing.companyName || ""} onChange={(e) => setEditing({ ...editing, companyName: e.target.value })} className="erp-input mt-1" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Company name *</label>
+              <input required value={editing.companyName || ""} onChange={(e) => setEditing({ ...editing, companyName: e.target.value })} className="erp-input" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Contact Person *</label>
-              <input required value={editing.contactPerson || ""} onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })} className="erp-input mt-1" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Contact person *</label>
+              <input required value={editing.contactPerson || ""} onChange={(e) => setEditing({ ...editing, contactPerson: e.target.value })} className="erp-input" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Phone</label>
-              <input value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} className="erp-input mt-1" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Phone</label>
+              <input value={editing.phone || ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} className="erp-input" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Email</label>
-              <input type="email" value={editing.email || ""} onChange={(e) => setEditing({ ...editing, email: e.target.value })} className="erp-input mt-1" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Email</label>
+              <input type="email" value={editing.email || ""} onChange={(e) => setEditing({ ...editing, email: e.target.value })} className="erp-input" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">US State (Tax Jurisdiction)</label>
-              <select value={editing.state || "NY"} onChange={(e) => setEditing({ ...editing, state: e.target.value })} className="erp-input mt-1">
-                {state.taxRules.map((t) => (
-                  <option key={t.id} value={t.stateCode}>{t.stateCode} — {t.stateName}</option>
-                ))}
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">US State</label>
+              <select value={editing.state || "NY"} onChange={(e) => setEditing({ ...editing, state: e.target.value })} className="erp-input">
+                {state.taxRules.map((t) => <option key={t.id} value={t.stateCode}>{t.stateCode} — {t.stateName}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Payment Terms</label>
-              <select value={editing.paymentTerms || "Net 30"} onChange={(e) => setEditing({ ...editing, paymentTerms: e.target.value as Customer["paymentTerms"] })} className="erp-input mt-1">
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Payment terms</label>
+              <select value={editing.paymentTerms || "Net 30"} onChange={(e) => setEditing({ ...editing, paymentTerms: e.target.value as Customer["paymentTerms"] })} className="erp-input">
                 <option value="Due on Receipt">Due on Receipt</option>
                 <option value="Net 15">Net 15</option>
                 <option value="Net 30">Net 30</option>
@@ -458,20 +483,20 @@ export function CustomersCRMModule({
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Credit Limit ($)</label>
-              <input type="number" value={editing.creditLimit ?? 50000} onChange={(e) => setEditing({ ...editing, creditLimit: Number(e.target.value) })} className="erp-input mt-1 font-mono-num" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Credit limit ($)</label>
+              <input type="number" value={editing.creditLimit ?? 50000} onChange={(e) => setEditing({ ...editing, creditLimit: Number(e.target.value) })} className="erp-input num" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Opening Balance ($)</label>
-              <input type="number" step="0.01" value={editing.openingBalance ?? 0} onChange={(e) => setEditing({ ...editing, openingBalance: Number(e.target.value) })} className="erp-input mt-1 font-mono-num" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Opening balance ($)</label>
+              <input type="number" step="0.01" value={editing.openingBalance ?? 0} onChange={(e) => setEditing({ ...editing, openingBalance: Number(e.target.value) })} className="erp-input num" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">EIN / Tax ID</label>
-              <input value={editing.taxId || ""} onChange={(e) => setEditing({ ...editing, taxId: e.target.value })} className="erp-input mt-1 font-mono-num" placeholder="XX-XXXXXXX" />
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">EIN / Tax ID</label>
+              <input value={editing.taxId || ""} onChange={(e) => setEditing({ ...editing, taxId: e.target.value })} className="erp-input num" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-[var(--text-secondary)]">Segment</label>
-              <select value={editing.segment || "Standard"} onChange={(e) => setEditing({ ...editing, segment: e.target.value as Customer["segment"] })} className="erp-input mt-1">
+              <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">Segment</label>
+              <select value={editing.segment || "Standard"} onChange={(e) => setEditing({ ...editing, segment: e.target.value as Customer["segment"] })} className="erp-input">
                 <option value="VIP">VIP</option>
                 <option value="High-Value">High-Value</option>
                 <option value="Standard">Standard</option>
@@ -480,16 +505,18 @@ export function CustomersCRMModule({
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold text-[var(--text-secondary)]">US Billing Address</label>
-            <input value={editing.billingAddress || ""} onChange={(e) => setEditing({ ...editing, billingAddress: e.target.value })} className="erp-input mt-1" placeholder="Street, Suite, City, State ZIP" />
+            <label className="block text-[12px] font-semibold text-[#4A4E57] mb-1">US Billing address</label>
+            <input value={editing.billingAddress || ""} onChange={(e) => setEditing({ ...editing, billingAddress: e.target.value })} className="erp-input" />
           </div>
-          <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-            <input type="checkbox" checked={Boolean(editing.taxExempt)} onChange={(e) => setEditing({ ...editing, taxExempt: e.target.checked })} className="accent-blue-500" />
-            Tax-Exempt Customer (Valid Resale / Exemption Certificate on File)
+          <label className="flex items-center gap-2 text-[13px] text-[#4A4E57] cursor-pointer">
+            <input type="checkbox" checked={Boolean(editing.taxExempt)} onChange={(e) => setEditing({ ...editing, taxExempt: e.target.checked })} className="w-4 h-4 accent-[#16181D]" />
+            Tax-exempt customer (resale certificate on file)
           </label>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <SecondaryButton onClick={() => setFormOpen(false)}>Cancel</SecondaryButton>
-            <PrimaryButton type="submit">Create Customer</PrimaryButton>
+            <PrimaryButton type="submit">
+              <Star className="h-4 w-4" /> Save customer
+            </PrimaryButton>
           </div>
         </form>
       </Modal>

@@ -260,7 +260,7 @@ export function LedgerReceivablesPaymentsModule({
                         </td>
                       )}
                       <td className="px-4 py-3"><StatusBadge status={entry.type} /></td>
-                      <td className="px-4 py-3 font-mono-num font-semibold text-[#1E3FAE]">{entry.referenceNo}</td>
+                      <td className="px-4 py-3 font-mono-num font-semibold text-[#111317]">{entry.referenceNo}</td>
                       <td className="px-4 py-3 text-[var(--text-secondary)]">{entry.description}</td>
                       <td className="px-4 py-3 text-right font-mono-num font-semibold text-[var(--text-primary)]">
                         {entry.debit > 0 ? formatUSD(entry.debit) : "—"}
@@ -268,11 +268,19 @@ export function LedgerReceivablesPaymentsModule({
                       <td className="px-4 py-3 text-right font-mono-num font-semibold text-[#05603F]">
                         {entry.credit > 0 ? formatUSD(entry.credit) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#7F4505]">
+                      <td className="px-4 py-3 text-right font-mono-num font-bold text-[#111317]">
                         {formatUSD(entry.runningBalance)}
                       </td>
                     </tr>
                   ))}
+                  <tr className="bg-[#111317] text-white font-bold">
+                    <td colSpan={selectedCustomerId === "ALL" ? 5 : 4} className="px-4 py-4 text-[13px]">
+                      Closing balance · {formatUSDate(new Date().toISOString().slice(0, 10))}
+                    </td>
+                    <td className="px-4 py-4 text-right num text-[13px]">{formatUSD(ledgerData.totalDebit)}</td>
+                    <td className="px-4 py-4 text-right num text-[13px] text-[#C5F04A]">{formatUSD(ledgerData.totalCredit)}</td>
+                    <td className="px-4 py-4 text-right num h text-[17px]">{formatUSD(ledgerData.closingBal)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
