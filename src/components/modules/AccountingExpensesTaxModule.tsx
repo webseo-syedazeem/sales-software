@@ -30,8 +30,16 @@ export function AccountingExpensesTaxModule({
 }) {
   const [tab, setTab] = useState<"coa" | "journal" | "statements" | "expenses" | "tax">("statements");
   const [jeOpen, setJeOpen] = useState(false);
+  const [accOpen, setAccOpen] = useState(false);
   const [expOpen, setExpOpen] = useState(false);
   const [taxOpen, setTaxOpen] = useState(false);
+  const [accForm, setAccForm] = useState({
+    code: "6400",
+    name: "",
+    type: "Expense" as "Asset" | "Liability" | "Equity" | "Revenue" | "Expense",
+    subType: "Operating Expense",
+    balance: 0,
+  });
 
   const [jeForm, setJeForm] = useState({
     description: "Monthly depreciation / accrual adjustment",
@@ -270,6 +278,14 @@ export function AccountingExpensesTaxModule({
       {/* CHART OF ACCOUNTS */}
       {tab === "coa" && (
         <GlassCard className="p-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Chart of Accounts ({state.accounts.length})
+            </span>
+            <SecondaryButton onClick={() => setAccOpen(true)} className="min-h-[30px] text-xs px-3">
+              <Plus className="h-3.5 w-3.5" /> Add GL Account
+            </SecondaryButton>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[var(--bg-elevated)] text-[var(--text-muted)] uppercase border-b border-[var(--border-subtle)]">
@@ -551,6 +567,39 @@ export function AccountingExpensesTaxModule({
             <PrimaryButton type="submit">
               <ReceiptText className="h-4 w-4" /> Submit Expense
             </PrimaryButton>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add GL Account Modal */}
+      <Modal open={accOpen} onClose={() => setAccOpen(false)} title="Add Chart of Accounts Entry">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await onRunAction("accounting:account", accForm);
+            setAccOpen(false);
+            setAccForm({ code: "", name: "", type: "Expense", subType: "Operating Expense", balance: 0 });
+          }}
+          className="space-y-3"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <input required placeholder="Account Code (e.g. 6400)" value={accForm.code} onChange={(e) => setAccForm({ ...accForm, code: e.target.value })} className="erp-input num" />
+            <select value={accForm.type} onChange={(e) => setAccForm({ ...accForm, type: e.target.value as typeof accForm.type })} className="erp-input">
+              <option value="Asset">Asset</option>
+              <option value="Liability">Liability</option>
+              <option value="Equity">Equity</option>
+              <option value="Revenue">Revenue</option>
+              <option value="Expense">Expense</option>
+            </select>
+          </div>
+          <input required placeholder="Account Name (e.g. Marketing & Advertising)" value={accForm.name} onChange={(e) => setAccForm({ ...accForm, name: e.target.value })} className="erp-input" />
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="Sub-Type" value={accForm.subType} onChange={(e) => setAccForm({ ...accForm, subType: e.target.value })} className="erp-input" />
+            <input type="number" step="0.01" placeholder="Opening Balance ($)" value={accForm.balance} onChange={(e) => setAccForm({ ...accForm, balance: Number(e.target.value) })} className="erp-input num" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <SecondaryButton onClick={() => setAccOpen(false)}>Cancel</SecondaryButton>
+            <PrimaryButton type="submit">Create GL Account</PrimaryButton>
           </div>
         </form>
       </Modal>

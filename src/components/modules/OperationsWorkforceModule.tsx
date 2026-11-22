@@ -40,7 +40,16 @@ export function OperationsWorkforceModule({
     "approvals"
   );
   const [branchOpen, setBranchOpen] = useState(false);
+  const [whOpen, setWhOpen] = useState(false);
   const [empOpen, setEmpOpen] = useState(false);
+  const [whForm, setWhForm] = useState({
+    code: `WH-0${state.warehouses.length + 1}`,
+    name: "",
+    branchId: state.branches[0]?.id || "br-hq",
+    location: "",
+    capacityUnits: 30000,
+    manager: "",
+  });
   const [docOpen, setDocOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<"products" | "customers">("products");
   const [csvText, setCsvText] = useState(
@@ -196,7 +205,10 @@ export function OperationsWorkforceModule({
       {/* TAB 2: BRANCHES & WAREHOUSES */}
       {tab === "branches" && (
         <div className="space-y-5">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <SecondaryButton onClick={() => setWhOpen(true)}>
+              <Plus className="h-4 w-4" /> Add Warehouse
+            </SecondaryButton>
             <PrimaryButton onClick={() => setBranchOpen(true)}>
               <Plus className="h-4 w-4" /> Add Branch Location
             </PrimaryButton>
@@ -501,6 +513,32 @@ export function OperationsWorkforceModule({
           <div className="flex justify-end gap-2">
             <SecondaryButton onClick={() => setBranchOpen(false)}>Cancel</SecondaryButton>
             <PrimaryButton type="submit">Create Branch</PrimaryButton>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={whOpen} onClose={() => setWhOpen(false)} title="Register Warehouse / Fulfillment Depot">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            await onRunAction("warehouse:save", whForm);
+            setWhOpen(false);
+          }}
+          className="space-y-3"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <input required placeholder="Warehouse Code (e.g. WH-TX-02)" value={whForm.code} onChange={(e) => setWhForm({ ...whForm, code: e.target.value })} className="erp-input num" />
+            <input required placeholder="Warehouse Name" value={whForm.name} onChange={(e) => setWhForm({ ...whForm, name: e.target.value })} className="erp-input" />
+            <select value={whForm.branchId} onChange={(e) => setWhForm({ ...whForm, branchId: e.target.value })} className="erp-input">
+              {state.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <input placeholder="City / Location" value={whForm.location} onChange={(e) => setWhForm({ ...whForm, location: e.target.value })} className="erp-input" />
+            <input placeholder="Warehouse Manager" value={whForm.manager} onChange={(e) => setWhForm({ ...whForm, manager: e.target.value })} className="erp-input" />
+            <input type="number" placeholder="Capacity (Units)" value={whForm.capacityUnits} onChange={(e) => setWhForm({ ...whForm, capacityUnits: Number(e.target.value) })} className="erp-input num" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <SecondaryButton onClick={() => setWhOpen(false)}>Cancel</SecondaryButton>
+            <PrimaryButton type="submit">Register Warehouse</PrimaryButton>
           </div>
         </form>
       </Modal>

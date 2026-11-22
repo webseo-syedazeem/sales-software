@@ -137,6 +137,28 @@ export function EnterpriseShell() {
     })();
   }, [loadBootstrap]);
 
+  // Dynamic browser tab title per screen
+  useEffect(() => {
+    const label = SCREEN_TITLES[activeTab] || "Workspace";
+    document.title = `${label} — Nexora Enterprise`;
+  }, [activeTab]);
+
+  // Live branch-scoped state when a specific branch is selected in the top switcher
+  const viewState = useMemo(() => {
+    if (!state || branchFilter === "all") return state;
+    return {
+      ...state,
+      salesOrders: state.salesOrders.filter((o) => o.branchId === branchFilter),
+      invoices: state.invoices.filter((i) => i.branchId === branchFilter),
+      payments: state.payments.filter((p) => p.branchId === branchFilter),
+      expenses: state.expenses.filter((e) => e.branchId === branchFilter),
+      ledgerEntries: state.ledgerEntries.filter((l) => l.branchId === branchFilter),
+      customers: state.customers.filter((c) => c.branchId === branchFilter),
+      purchaseOrders: state.purchaseOrders.filter((po) => po.branchId === branchFilter),
+      employees: state.employees.filter((emp) => emp.branchId === branchFilter),
+    };
+  }, [state, branchFilter]);
+
   // Ctrl+K / Cmd+K Global Search
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -635,7 +657,7 @@ export function EnterpriseShell() {
             >
               {activeTab === "dashboard" && (
                 <ExecutiveDashboard
-                  state={state}
+                  state={viewState || state}
                   user={user}
                   onNavigate={setActiveTab}
                   onRunAction={async (a, p) => {
@@ -645,7 +667,7 @@ export function EnterpriseShell() {
               )}
               {activeTab === "sales" && (
                 <SalesInvoicingModule
-                  state={state}
+                  state={viewState || state}
                   initialTab="orders"
                   onRunAction={async (a, p) => {
                     await runAction(a, p);
@@ -654,7 +676,7 @@ export function EnterpriseShell() {
               )}
               {activeTab === "invoices" && (
                 <SalesInvoicingModule
-                  state={state}
+                  state={viewState || state}
                   initialTab="invoices"
                   onRunAction={async (a, p) => {
                     await runAction(a, p);
@@ -663,7 +685,7 @@ export function EnterpriseShell() {
               )}
               {activeTab === "customers" && (
                 <CustomersCRMModule
-                  state={state}
+                  state={viewState || state}
                   onNavigate={setActiveTab}
                   onRunAction={async (a, p) => {
                     await runAction(a, p);
@@ -672,7 +694,7 @@ export function EnterpriseShell() {
               )}
               {activeTab === "ledger" && (
                 <LedgerReceivablesPaymentsModule
-                  state={state}
+                  state={viewState || state}
                   onRunAction={async (a, p) => {
                     await runAction(a, p);
                   }}
@@ -680,7 +702,7 @@ export function EnterpriseShell() {
               )}
               {activeTab === "accounting" && (
                 <AccountingExpensesTaxModule
-                  state={state}
+                  state={viewState || state}
                   onRunAction={async (a, p) => {
                     await runAction(a, p);
                   }}

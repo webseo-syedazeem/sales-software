@@ -228,6 +228,14 @@ export function CustomersCRMModule({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <SecondaryButton
+                      onClick={() => {
+                        setEditing({ ...selected });
+                        setFormOpen(true);
+                      }}
+                    >
+                      Edit
+                    </SecondaryButton>
                     <SecondaryButton onClick={() => onNavigate("ledger")}>
                       <BookOpen className="h-4 w-4" /> Ledger
                     </SecondaryButton>
@@ -389,13 +397,28 @@ export function CustomersCRMModule({
                   </div>
                   <div className="space-y-2">
                     {selected.tasks.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between p-3 rounded-[12px] border border-[#EEECE7] bg-[#FAF9F6]">
-                        <div>
-                          <div className="font-semibold text-[13.5px] text-[#111317]">{t.title}</div>
-                          <div className="text-[12px] text-[#5F636C]">{t.assignedTo} · Due {formatUSDate(t.dueDate)}</div>
+                      <label key={t.id} className="flex items-center justify-between gap-3 p-3 rounded-[12px] border border-[#EEECE7] bg-[#FAF9F6] cursor-pointer">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={t.status === "Completed"}
+                            onChange={() =>
+                              onRunAction("customer:task-toggle", {
+                                customerId: selected.id,
+                                taskId: t.id,
+                              })
+                            }
+                            className="w-4 h-4 accent-[#16181D] cursor-pointer"
+                          />
+                          <div className="min-w-0">
+                            <div className={`font-semibold text-[13.5px] ${t.status === "Completed" ? "line-through text-[#6B6F78]" : "text-[#111317]"}`}>
+                              {t.title}
+                            </div>
+                            <div className="text-[12px] text-[#5F636C]">{t.assignedTo} · Due {formatUSDate(t.dueDate)}</div>
+                          </div>
                         </div>
-                        <StatusBadge status={t.priority} />
-                      </div>
+                        <StatusBadge status={t.status === "Completed" ? "Completed" : t.priority} />
+                      </label>
                     ))}
                   </div>
                 </GlassCard>

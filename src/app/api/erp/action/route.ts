@@ -583,6 +583,51 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "customer:task-toggle": {
+        requirePerm("edit");
+        const customer = state.customers.find((c) => c.id === payload.customerId);
+        const task = customer?.tasks.find((t) => t.id === payload.taskId);
+        if (task) {
+          task.status = task.status === "Completed" ? "Open" : "Completed";
+          changed.add("customers");
+          message = `Task marked ${task.status}.`;
+        }
+        break;
+      }
+
+      case "ledger:email-statement": {
+        const cust = state.customers.find((c) => c.id === payload.customerId);
+        if (!cust || !cust.email) {
+          throw new Error("Select a customer with an email address to send a statement.");
+        }
+        const entries = state.ledgerEntries.filter((e) => e.customerId === cust.id);
+        const subject = `Account Statement from ${state.settings.legalName} — Balance $${cust.currentBalance.toFixed(2)}`;
+        const html = `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">
+          <h2 style="margin:0 0 8px;">${state.settings.legalName}</h2>
+          <p>Statement of Account for <b>${cust.companyName}</b> (${cust.customerCode})</p>
+          <p>Total Ledger Entries: ${entries.length} · <b>Current Balance Due: $${cust.currentBalance.toFixed(2)} USD</b></p>
+          <p style="font-size:12px;color:#64748b;">${state.settings.emailSignature}</p>
+        </div>`;
+        const text = `${subject}\nCustomer: ${cust.companyName}\nCurrent Balance Due: $${cust.currentBalance.toFixed(2)} USD`;
+        const dispatch = await sendEnterpriseEmail({ to: cust.email, subject, html, text });
+        state.emailLogs.unshift({
+          id: uid("em"),
+          sentAt: new Date().toISOString(),
+          to: cust.email,
+          subject,
+          template: "Customer Statement",
+          referenceNo: cust.customerCode,
+          status: dispatch.status,
+          detail: dispatch.detail,
+        });
+        changed.add("emailLogs");
+        message =
+          dispatch.status === "Delivered (SMTP)"
+            ? `Customer statement emailed to ${cust.email}.`
+            : `${dispatch.status}: ${dispatch.detail}`;
+        break;
+      }
+
       case "customer:note": {
         requirePerm("create");
         const { customerId, channel, summary } = payload as {

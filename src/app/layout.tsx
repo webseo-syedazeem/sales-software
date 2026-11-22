@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 
@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "Nexora Enterprise — Product, Sales & Financial Management",
   description:
     "US-ready Enterprise Product, Inventory, CRM, Sales, Invoicing, Customer Ledger, Accounting, Multi-Branch & AI Business Management Software.",
+  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#111317",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

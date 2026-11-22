@@ -296,6 +296,7 @@ export function SalesInvoicingModule({
                       <th className="px-5 py-3 text-right">Total</th>
                       <th className="px-5 py-3">Payment</th>
                       <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3 text-right">Invoice</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#EEECE7]">
@@ -325,6 +326,21 @@ export function SalesInvoicingModule({
                               <option key={st} value={st}>{st}</option>
                             ))}
                           </select>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {so.invoiceId ? (
+                            <SecondaryButton
+                              className="min-h-[30px] text-[12px] px-2.5"
+                              onClick={() => {
+                                setSelectedInvId(so.invoiceId!);
+                                setTab("invoices");
+                              }}
+                            >
+                              View Invoice
+                            </SecondaryButton>
+                          ) : (
+                            <span className="text-[12px] text-[#6B6F78]">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

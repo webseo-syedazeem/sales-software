@@ -206,6 +206,15 @@ export function LedgerReceivablesPaymentsModule({
               <SecondaryButton onClick={() => setStatementPreviewOpen(true)}>
                 <Printer className="h-4 w-4" /> Customer Statement
               </SecondaryButton>
+              {selectedCustomerId !== "ALL" && (
+                <SecondaryButton
+                  onClick={() =>
+                    onRunAction("ledger:email-statement", { customerId: selectedCustomerId })
+                  }
+                >
+                  <Mail className="h-4 w-4" /> Email Statement
+                </SecondaryButton>
+              )}
               <SecondaryButton
                 onClick={() =>
                   exportToCSV(
