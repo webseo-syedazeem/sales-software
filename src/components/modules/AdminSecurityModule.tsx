@@ -57,10 +57,11 @@ export function AdminSecurityModule({
     email: "",
     password: "",
     role: "Sales Staff" as RoleName,
-    branchId: state.branches[0]?.id || "br-ny",
+    branchId: state.branches[0]?.id || "br-hq",
     department: "Commercial Sales",
   });
 
+  const [pwdForm, setPwdForm] = useState({ currentPassword: "", newPassword: "" });
   const [settingsForm, setSettingsForm] = useState({ ...state.settings });
 
   const filteredAudit = state.auditLogs.filter((l) => {
@@ -151,7 +152,12 @@ export function AdminSecurityModule({
                             <Unlock className="h-3.5 w-3.5" /> Unlock
                           </SecondaryButton>
                         ) : (
-                          <span className="text-[11px] text-emerald-400">Protected</span>
+                          <button
+                            onClick={() => onRunAction("user:lock", { userId: u.id })}
+                            className="rounded-lg bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/25 cursor-pointer"
+                          >
+                            Lock & Revoke
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -287,19 +293,41 @@ export function AdminSecurityModule({
                 Scheduled policy: <strong>{state.settings.autoBackupSchedule}</strong> · SHA-256 integrity checksums verified on every snapshot.
               </p>
             </div>
-            <PrimaryButton
-              onClick={async () => {
-                const res = await onRunAction("backup:create", {});
-                if (res && typeof res.exportJson === "string") {
-                  downloadJSON(
-                    `apexledger-backup-${new Date().toISOString().slice(0, 10)}.json`,
-                    res.exportJson
-                  );
-                }
-              }}
-            >
-              <Download className="h-4 w-4" /> Create & Download Verified Backup
-            </PrimaryButton>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] hover:border-blue-400/50 cursor-pointer">
+                Restore Signed Backup
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      if (typeof reader.result === "string") {
+                        await onRunAction("backup:restore", { backupJson: reader.result });
+                      }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <PrimaryButton
+                onClick={async () => {
+                  const res = await onRunAction("backup:create", {});
+                  if (res && typeof res.exportJson === "string") {
+                    downloadJSON(
+                      `apexledger-signed-backup-${new Date().toISOString().slice(0, 10)}.json`,
+                      res.exportJson
+                    );
+                  }
+                }}
+              >
+                <Download className="h-4 w-4" /> Create & Download Signed Backup
+              </PrimaryButton>
+            </div>
           </GlassCard>
 
           <GlassCard className="p-0 overflow-hidden">
@@ -411,6 +439,39 @@ export function AdminSecurityModule({
               <p>JWT_SECRET=&lt;64-char-secret&gt;</p>
               <p>DATA_ENCRYPTION_KEY=&lt;32-byte-hex&gt;</p>
             </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await onRunAction("user:change-password", pwdForm);
+                setPwdForm({ currentPassword: "", newPassword: "" });
+              }}
+              className="pt-3 border-t border-[var(--border-subtle)] space-y-2.5"
+            >
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                Rotate Your Password (Revokes Other Sessions)
+              </p>
+              <input
+                type="password"
+                required
+                placeholder="Current Password"
+                value={pwdForm.currentPassword}
+                onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })}
+                className="erp-input text-xs"
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                placeholder="New Strong Password"
+                value={pwdForm.newPassword}
+                onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })}
+                className="erp-input text-xs"
+              />
+              <SecondaryButton type="submit" className="w-full text-xs">
+                Update Password
+              </SecondaryButton>
+            </form>
           </GlassCard>
         </div>
       )}

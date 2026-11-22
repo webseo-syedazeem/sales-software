@@ -75,8 +75,12 @@ export function AccountingExpensesTaxModule({
     const totalExpenses = expenses.reduce((s, a) => s + a.balance, 0);
     const netIncome = totalRevenue - totalExpenses;
 
-    const cashInflows = state.payments.reduce((s, p) => s + p.amount, 0) + 124500;
-    const cashOutflows = state.expenses.reduce((s, e) => s + e.amount, 0) + 74200;
+    const cashInflows = state.payments
+      .filter((p) => p.paymentType !== "Refund" && p.paymentType !== "Reversal")
+      .reduce((s, p) => s + p.amount, 0);
+    const cashOutflows =
+      state.expenses.filter((e) => e.status === "Approved" || e.status === "Paid").reduce((s, e) => s + e.amount, 0) +
+      state.purchaseOrders.reduce((s, po) => s + po.amountPaid, 0);
 
     return {
       assets,

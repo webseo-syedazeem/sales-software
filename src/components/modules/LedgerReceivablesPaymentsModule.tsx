@@ -46,8 +46,9 @@ export function LedgerReceivablesPaymentsModule({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
     state.customers[0]?.id || "ALL"
   );
-  const [dateFrom, setDateFrom] = useState("2026-08-01");
-  const [dateTo, setDateTo] = useState("2026-12-31");
+  const currentYear = new Date().getFullYear();
+  const [dateFrom, setDateFrom] = useState(`${currentYear}-01-01`);
+  const [dateTo, setDateTo] = useState(`${currentYear}-12-31`);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
@@ -96,12 +97,13 @@ export function LedgerReceivablesPaymentsModule({
 
   // AR Aging calculations (Current, 1-30, 31-60, 61-90, 90+)
   const arData = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
     const openInvoices = state.invoices.filter(
       (i) => i.balanceDue > 0 && i.status !== "Cancelled" && i.status !== "Refunded"
     );
     const buckets = { current: 0, d30: 0, d60: 0, d90: 0, d90plus: 0 };
     for (const inv of openInvoices) {
-      const overdueDays = daysBetween(inv.dueDate, "2026-11-22");
+      const overdueDays = daysBetween(inv.dueDate, todayIso);
       if (overdueDays <= 0) buckets.current += inv.balanceDue;
       else if (overdueDays <= 30) buckets.d30 += inv.balanceDue;
       else if (overdueDays <= 60) buckets.d60 += inv.balanceDue;
@@ -117,9 +119,9 @@ export function LedgerReceivablesPaymentsModule({
     ];
     const totalAR = openInvoices.reduce((s, i) => s + i.balanceDue, 0);
     const overdueTotal = openInvoices
-      .filter((i) => daysBetween(i.dueDate, "2026-11-22") > 0)
+      .filter((i) => daysBetween(i.dueDate, todayIso) > 0)
       .reduce((s, i) => s + i.balanceDue, 0);
-    return { openInvoices, buckets, chartData, totalAR, overdueTotal };
+    return { openInvoices, buckets, chartData, totalAR, overdueTotal, todayIso };
   }, [state.invoices]);
 
   const customerOpenInvoices = state.invoices.filter(
@@ -332,7 +334,7 @@ export function LedgerReceivablesPaymentsModule({
                   </thead>
                   <tbody className="divide-y divide-[var(--border-subtle)]">
                     {arData.openInvoices.map((inv) => {
-                      const days = daysBetween(inv.dueDate, "2026-11-22");
+                      const days = daysBetween(inv.dueDate, arData.todayIso);
                       return (
                         <tr key={inv.id} className="hover:bg-blue-500/5">
                           <td className="px-4 py-3 font-mono-num font-bold text-blue-400">{inv.invoiceNo}</td>

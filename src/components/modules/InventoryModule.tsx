@@ -309,8 +309,9 @@ export function InventoryModule({
             { label: "61–90 Days (Slow)", min: 61, max: 90, tone: "border-amber-500/30 bg-amber-500/10 text-amber-400" },
             { label: "90+ Days (Aging Risk)", min: 91, max: 9999, tone: "border-rose-500/30 bg-rose-500/10 text-rose-400" },
           ].map((bucket) => {
+            const todayStr = new Date().toISOString().slice(0, 10);
             const items = summary.lots.filter((l) => {
-              const d = daysBetween(l.receivedDate, "2026-11-22");
+              const d = daysBetween(l.receivedDate, todayStr);
               return d >= bucket.min && d <= bucket.max;
             });
             const value = items.reduce((s, l) => s + l.availableStock * l.unitCost, 0);

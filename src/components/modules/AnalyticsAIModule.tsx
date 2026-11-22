@@ -93,15 +93,37 @@ export function AnalyticsAIModule({ state }: { state: ClientERPState }) {
     const grossMargin = revenue > 0 ? ((revenue - cogs) / revenue) * 100 : 0;
     const netMargin = revenue > 0 ? ((revenue - cogs - expenses) / revenue) * 100 : 0;
     const aov = active.length > 0 ? revenue / active.length : 0;
-    const clv = state.customers.length > 0 ? (revenue / state.customers.length) * 3.4 : 0;
+    const clv = state.customers.length > 0 ? revenue / state.customers.length : 0;
 
+    // Live 3-month actuals + moving-average 3-month forecast purely from MongoDB invoices
+    const now = new Date();
+    const pastMonths: Array<{ period: string; actual: number | null; forecast: number }> = [];
+    const actualVals: number[] = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const rev = Math.round(
+        active.filter((inv) => inv.issueDate.startsWith(ym)).reduce((s, inv) => s + inv.total, 0)
+      );
+      actualVals.push(rev);
+      pastMonths.push({
+        period: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        actual: rev,
+        forecast: rev,
+      });
+    }
+    const avgBase = actualVals.reduce((s, v) => s + v, 0) / Math.max(1, actualVals.length);
+    const trendSlope = actualVals.length >= 2 ? Math.max(0, (actualVals[2] - actualVals[0]) / 2) : 0;
     const forecastData = [
-      { period: "Sep", actual: 102600, forecast: 101000 },
-      { period: "Oct", actual: 118900, forecast: 115000 },
-      { period: "Nov", actual: Math.round(revenue), forecast: 124000 },
-      { period: "Dec (Est)", actual: null, forecast: Math.round(revenue * 1.14) },
-      { period: "Jan (Est)", actual: null, forecast: Math.round(revenue * 1.21) },
-      { period: "Feb (Est)", actual: null, forecast: Math.round(revenue * 1.28) },
+      ...pastMonths,
+      ...[1, 2, 3].map((step) => {
+        const d = new Date(now.getFullYear(), now.getMonth() + step, 1);
+        return {
+          period: `${d.toLocaleDateString("en-US", { month: "short" })} (Est)`,
+          actual: null,
+          forecast: Math.round(Math.max(0, avgBase + trendSlope * step)),
+        };
+      }),
     ];
 
     const velocity = state.products.map((p) => {

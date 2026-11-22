@@ -1,46 +1,32 @@
 # ApexLedger Enterprise — Product, Sales & Financial Management Software
 
-A production-grade, US-ready **Enterprise ERP & Financial Management Platform** built with **Next.js (App Router), TypeScript, Tailwind CSS, Framer Motion, Recharts, and MongoDB (Mongoose)** — architected for 1-click deployment on **Vercel + MongoDB Atlas**.
+A production-grade, US-ready **Enterprise ERP & Financial Management Platform** built with **Next.js (App Router), TypeScript, Tailwind CSS, Framer Motion, Recharts, Nodemailer, and MongoDB Atlas (Mongoose)** — architected for zero-demo live operations on **Vercel + MongoDB Atlas**.
 
 ---
 
-## Core Modules Included (All 38 Enterprise Requirements)
+## Security & Production Architecture
 
-1. **Executive Command Center & CEO 360° Overview** — Real-time sales, today's/monthly/yearly totals, receivables, cash flow, branch performance, customizable widgets, and KPI click-to-drill-down drawers.
-2. **Product Master** — Pre-configured with **Acrylic, Backlight, CD, PC Bottle, PC Kohli, PVC Foam Board, and PC Jug**; multi-tier pricing (Retail/Wholesale/Distributor/VIP), variants, specs, live printable **Barcode & QR Code** labels, and product-wise sales/purchase/profit/stock histories.
-3. **Multi-Warehouse Inventory & Lot Control** — Real-time stock in/out, transfers, physical audits, damaged/returned/reserved/available stock, low-stock reorder alerts, batch/lot/serial tracking, inventory aging, and movement audit trails.
-4. **Customer Management & CRM** — US billing/shipping profiles, tax-exempt certificates, credit limit monitoring, VIP/High-Value/At-Risk segmentation, follow-up tasks, reminders, and communication timelines.
-5. **Quick Sales Punching & Sales Order Engine** — USB barcode scanner input mode, multi-item builder, automatic US state sales tax calculation, 7-stage order lifecycle (`Draft → Completed / Returned`), and automatic stock + ledger posting.
-6. **US Professional Invoicing** — Automatic numbering, US corporate print/PDF layout, QR pay reference, email dispatch logging, duplicate, cancel, refund, and credit notes.
-7. **Customer Ledger (Core Module)** — Customer-wise and consolidated Debit/Credit ledgers with exact running balances, date-range filters, opening/closing balances, manual adjustments, and printable Statements of Account.
-8. **Accounts Receivable & Payment Management** — 30/60/90+ day aging charts, overdue collection queue, automated reminders, Cash/ACH/Check/Card/Online payments, partial/advance/refund/reversal entries, printable receipts, and reconciliation.
-9. **Suppliers, Purchasing & Accounts Payable** — Vendor scorecards, purchase orders, 1-click Goods Receiving (auto-increments warehouse inventory), and vendor bill settlement.
-10. **Double-Entry Accounting, Expenses & US State Tax** — Chart of Accounts, balanced Journal Entries (`Debit = Credit`), live Trial Balance, P&L, Balance Sheet, Cash-Flow Statement, recurring & budgeted expenses, and US state tax configuration.
-11. **Approval Workflows, Multi-Branch, Staff, Commissions, Documents & Integrations** — `Salesperson → Manager → Finance → Completed` pipeline, commission approvals, Document Vault, CSV/Excel bulk import & export, and API/POS Hardware connectors.
-12. **Advanced BI Analytics & NexAI Executive Copilot** — Live natural-language queries against ERP data, 3-month revenue forecast, margins, CLV, inventory velocity, and downloadable reports.
-13. **Enterprise Security, RBAC, Audit Trail & Disaster Recovery** — `bcryptjs` password hashing, `HttpOnly` HS256 JWT sessions, failed-login account lockout, API rate limiting, CSRF origin protection, CSP/HSTS security headers, 9 roles x 11 permissions matrix, immutable before/after audit trail, and SHA-256 verified database backup snapshots.
+- **Zero Hardcoded Credentials / Zero Demo Data:** First launch opens a one-time **Super Admin Setup Wizard** (`/api/auth/setup`) that permanently locks itself (`403`) once the initial Admin account is created in MongoDB.
+- **Hardened Authentication & Session Revocation:** `bcryptjs` hashing, strong password enforcement, HS256 JWT in `HttpOnly; SameSite=Lax` cookies (`Secure` enforced over HTTPS), failed-login lockout, idle auto-logout, and `tokenVersion`-based instant session revocation when locked or password rotated.
+- **Live MongoDB RBAC:** Permissions across 9 enterprise roles × 11 capabilities are verified against live MongoDB user records on every API mutation.
+- **Injection & Abuse Protections:** Distributed MongoDB TTL-indexed rate limiting (`rate_limits` collection), recursive `$` operator & prototype-pollution payload sanitization, CSRF origin verification, and strict HTTP security headers (HSTS, CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`).
+- **Atomic MongoDB Persistence:** Per-document `bulkWrite` upserts + targeted deletes across 27 collections (no destructive `deleteMany + insertMany` races).
+- **Tamper-Proof Disaster Recovery:** AES-256-GCM crypto module and **HMAC-SHA256 signed** database Backup & Restore verification.
+- **Live SMTP Email & Live AI:** Real `nodemailer` SMTP email delivery for US invoices & reminders, plus optional live **Gemini API** synthesis layered over real-time MongoDB analytics.
 
 ---
 
-## Deploying to Vercel + MongoDB Atlas
+## Required Vercel Environment Variables
 
-1. Import this repository (`https://github.com/webseo-syedazeem/sales-software.git`) into **Vercel**.
-2. Add the following Environment Variables in **Vercel Project Settings → Environment Variables**:
-   - `MONGODB_URI` — Your MongoDB Atlas connection string (`mongodb+srv://...`)
-   - `JWT_SECRET` — A 64-character random secret string
-   - `DATA_ENCRYPTION_KEY` — A 32-byte hex key
-   - `NEXT_PUBLIC_APP_URL` — Your deployed Vercel URL
-3. Deploy! On first request, ApexLedger automatically seeds all **27 MongoDB collections** if the database is empty.
+Set these in **Vercel → Project Settings → Environment Variables** (`Production`, `Preview`, `Development`):
 
----
+| Variable | Required | Purpose |
+| :--- | :---: | :--- |
+| `MONGODB_URI` | **Yes** | MongoDB Atlas connection string (`mongodb+srv://.../apexledger_erp?retryWrites=true&w=majority`) |
+| `JWT_SECRET` | **Yes** | 64+ character random cryptographic secret (enforced in production) |
+| `DATA_ENCRYPTION_KEY` | **Yes** | 32-byte hex key for AES-256-GCM encryption & HMAC-SHA256 backup signing |
+| `NEXT_PUBLIC_APP_URL` | **Yes** | Your deployed Vercel URL |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Optional | Live SMTP email delivery (Gmail App Password, SendGrid, Resend SMTP, etc.) |
+| `GEMINI_API_KEY` | Optional | Enables live Gemini LLM synthesis inside NexAI Copilot (built-in live MongoDB query engine always works) |
 
-## Default Role Credentials (For Testing RBAC)
-
-| Role | Email | Password |
-| :--- | :--- | :--- |
-| **Executive Admin** | `admin@apexledger.com` | `Admin@12345!` |
-| **Branch Manager** | `manager@apexledger.com` | `Manager@12345!` |
-| **Sales Staff** | `sales@apexledger.com` | `Sales@12345!` |
-| **CPA Accountant** | `finance@apexledger.com` | `Finance@12345!` |
-
-> **Local Development:** Run `npm install && npm run dev` and open `http://localhost:3000`. Without `MONGODB_URI`, the platform runs seamlessly in auto-seeded local persistence mode until you configure MongoDB Atlas.
+> **MongoDB Atlas Network Access:** In Atlas → **Security → Network Access**, add `0.0.0.0/0` so Vercel Serverless Functions can connect to your cluster.

@@ -72,7 +72,10 @@ export function OperationsWorkforceModule({
     category: "Customer Document",
     relatedEntityType: "Customer",
     relatedEntityName: state.customers[0]?.companyName || "",
-    fileName: "agreement-2026.pdf",
+    fileName: "",
+    fileSizeKb: 0,
+    mimeType: "",
+    fileDataUrl: "",
     notes: "",
   });
 
@@ -325,15 +328,34 @@ export function OperationsWorkforceModule({
               </SecondaryButton>
             </div>
             <div className="space-y-2.5">
+              {state.documents.length === 0 && (
+                <p className="text-xs text-[var(--text-muted)] py-4 text-center">No documents uploaded yet.</p>
+              )}
               {state.documents.map((doc) => (
-                <div key={doc.id} className="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 text-xs">
-                  <div>
-                    <p className="font-bold text-[var(--text-primary)]">{doc.title}</p>
-                    <p className="text-[11px] text-[var(--text-muted)]">
+                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="font-bold text-[var(--text-primary)] truncate">{doc.title}</p>
+                    <p className="text-[11px] text-[var(--text-muted)] truncate">
                       {doc.category} · Linked: {doc.relatedEntityName} · {doc.fileName} ({doc.fileSizeKb} KB)
                     </p>
                   </div>
-                  <span className="text-[11px] text-[var(--text-muted)]">{formatUSDate(doc.uploadedAt)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {doc.fileDataUrl && (
+                      <a
+                        href={doc.fileDataUrl}
+                        download={doc.fileName}
+                        className="rounded-lg bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-400 hover:bg-blue-500/25"
+                      >
+                        Download
+                      </a>
+                    )}
+                    <button
+                      onClick={() => onRunAction("document:delete", { documentId: doc.id })}
+                      className="rounded-lg bg-rose-500/15 px-2 py-1 text-[11px] font-semibold text-rose-400 hover:bg-rose-500/25 cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -513,7 +535,7 @@ export function OperationsWorkforceModule({
         </form>
       </Modal>
 
-      <Modal open={docOpen} onClose={() => setDocOpen(false)} title="Attach Document to Enterprise Vault">
+      <Modal open={docOpen} onClose={() => setDocOpen(false)} title="Upload Document to Enterprise Vault" subtitle="Stores real files (PDF, PNG, JPG, CSV, DOCX up to 2MB) directly in MongoDB.">
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -533,12 +555,34 @@ export function OperationsWorkforceModule({
               <option value="Product Document">Product Document</option>
               <option value="Payment Proof">Payment Proof</option>
             </select>
-            <input placeholder="File Name (e.g. contract.pdf)" value={docForm.fileName} onChange={(e) => setDocForm({ ...docForm, fileName: e.target.value })} className="erp-input" />
+            <input placeholder="Related Entity (Customer / Invoice)" value={docForm.relatedEntityName} onChange={(e) => setDocForm({ ...docForm, relatedEntityName: e.target.value })} className="erp-input" />
           </div>
-          <input placeholder="Related Entity (Customer / Product / Invoice)" value={docForm.relatedEntityName} onChange={(e) => setDocForm({ ...docForm, relatedEntityName: e.target.value })} className="erp-input" />
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Select File (Max 2MB)</label>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.csv,.txt,.docx,.xlsx"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  setDocForm((prev) => ({
+                    ...prev,
+                    fileName: file.name,
+                    fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
+                    mimeType: file.type,
+                    fileDataUrl: typeof reader.result === "string" ? reader.result : "",
+                  }));
+                };
+                reader.readAsDataURL(file);
+              }}
+              className="erp-input text-xs"
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <SecondaryButton onClick={() => setDocOpen(false)}>Cancel</SecondaryButton>
-            <PrimaryButton type="submit">Upload Metadata</PrimaryButton>
+            <PrimaryButton type="submit">Save Document</PrimaryButton>
           </div>
         </form>
       </Modal>

@@ -3,10 +3,16 @@ import {
   computeChecksum,
   getServerSession,
   hasPermission,
+  resolveLiveSessionUser,
+  signSessionToken,
+  SESSION_COOKIE_NAME,
 } from "@/lib/security/auth";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
-import { hashPassword, validateStrongPassword } from "@/lib/security/password";
+import { hashPassword, validateStrongPassword, verifyPassword } from "@/lib/security/password";
+import { sanitizePayload, signHmac, verifyHmac } from "@/lib/security/crypto";
+import { sendEnterpriseEmail } from "@/lib/email/mailer";
 import {
+  ALL_COLLECTION_KEYS,
   appendAudit,
   loadERPState,
   sanitizeStateForClient,
@@ -72,7 +78,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ip = getClientIp(req.headers);
-  const rate = checkRateLimit(`action:${session.userId}:${ip}`, 180, 60 * 1000);
+  const rate = await checkRateLimit(`action:${session.userId}:${ip}`, 180, 60 * 1000);
   if (!rate.allowed) {
     return NextResponse.json({ error: "Rate limit exceeded. Please slow down." }, { status: 429 });
   }
@@ -80,21 +86,36 @@ export async function POST(req: NextRequest) {
   const device = req.headers.get("user-agent")?.slice(0, 64) || "Web Client";
 
   try {
-    const body = (await req.json()) as { action: string; payload?: Record<string, unknown> };
-    const { action, payload = {} } = body;
+    const state = await loadERPState();
+    const liveUser = resolveLiveSessionUser(session, state);
+    if (!liveUser) {
+      return NextResponse.json(
+        { error: "Session revoked or account inactive. Please sign in again." },
+        { status: 401 }
+      );
+    }
+
+    const rawBody = sanitizePayload(
+      (await req.json()) as { action: string; payload?: Record<string, unknown> }
+    );
+    const { action, payload = {} } = rawBody;
+    if (typeof action !== "string") {
+      return NextResponse.json({ error: "Invalid action format." }, { status: 400 });
+    }
 
     const requirePerm = (perm: PermissionKey) => {
-      if (!hasPermission(session, perm)) {
-        throw new Error(`FORBIDDEN: Your role (${session.role}) lacks '${perm}' permission.`);
+      if (!hasPermission(liveUser, perm)) {
+        throw new Error(`FORBIDDEN: Your role (${liveUser.role}) lacks '${perm}' permission.`);
       }
     };
 
-    const state = await loadERPState();
     const changed = new Set<ERPCollectionKey | "settings">(["auditLogs"]);
     let message = "Action completed successfully.";
     let extraData: Record<string, unknown> = {};
+    let refreshedCookieToken: string | null = null;
 
     const today = new Date().toISOString().slice(0, 10);
+    const yearStr = today.slice(0, 4);
 
     switch (action) {
       case "product:save": {
@@ -106,20 +127,26 @@ export async function POST(req: NextRequest) {
           const prev = state.products[existingIdx];
           const updated: Product = {
             ...prev,
-            ...p,
-            purchasePrice: Number(p.purchasePrice ?? prev.purchasePrice),
-            sellingPrice: Number(p.sellingPrice ?? prev.sellingPrice),
-            wholesalePrice: Number(p.wholesalePrice ?? prev.wholesalePrice),
-            minSellingPrice: Number(p.minSellingPrice ?? prev.minSellingPrice),
-            minStockLevel: Number(p.minStockLevel ?? prev.minStockLevel),
-            maxStockLevel: Number(p.maxStockLevel ?? prev.maxStockLevel),
-            reorderLevel: Number(p.reorderLevel ?? prev.reorderLevel),
+            name: String(p.name ?? prev.name).trim(),
+            sku: String(p.sku ?? prev.sku).trim().toUpperCase(),
+            category: String(p.category ?? prev.category).trim(),
+            description: String(p.description ?? prev.description),
+            uom: String(p.uom ?? prev.uom),
+            purchasePrice: Math.max(0, Number(p.purchasePrice ?? prev.purchasePrice)),
+            sellingPrice: Math.max(0, Number(p.sellingPrice ?? prev.sellingPrice)),
+            wholesalePrice: Math.max(0, Number(p.wholesalePrice ?? prev.wholesalePrice)),
+            minSellingPrice: Math.max(0, Number(p.minSellingPrice ?? prev.minSellingPrice)),
+            taxable: p.taxable !== undefined ? Boolean(p.taxable) : prev.taxable,
+            status: p.status === "Inactive" ? "Inactive" : "Active",
+            minStockLevel: Math.max(0, Number(p.minStockLevel ?? prev.minStockLevel)),
+            maxStockLevel: Math.max(0, Number(p.maxStockLevel ?? prev.maxStockLevel)),
+            reorderLevel: Math.max(0, Number(p.reorderLevel ?? prev.reorderLevel)),
             updatedAt: now,
           };
           state.products[existingIdx] = updated;
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "UPDATE",
             module: "Products",
             recordId: updated.sku,
@@ -129,61 +156,62 @@ export async function POST(req: NextRequest) {
             ipAddress: ip,
             device,
           });
-          message = `Product ${updated.name} updated.`;
+          message = `Product ${updated.name} updated in MongoDB.`;
         } else {
           const newId = uid("prod");
-          const sku = (p.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase();
-          const selling = Number(p.sellingPrice || 50);
+          const sku = String(p.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase();
+          const selling = Math.max(0, Number(p.sellingPrice || 0));
           const created: Product = {
             id: newId,
             sku,
-            name: String(p.name || "New Product"),
-            category: String(p.category || "General Industrial"),
+            name: String(p.name || "").trim(),
+            category: String(p.category || "General Industrial").trim(),
             description: String(p.description || ""),
-            specifications: (p.specifications as Record<string, string>) || { Grade: "Commercial US" },
+            specifications: { Grade: "Commercial US" },
             uom: String(p.uom || "Unit"),
-            purchasePrice: Number(p.purchasePrice || 25),
+            purchasePrice: Math.max(0, Number(p.purchasePrice || 0)),
             sellingPrice: selling,
-            wholesalePrice: Number(p.wholesalePrice || round2(selling * 0.85)),
-            minSellingPrice: Number(p.minSellingPrice || round2(selling * 0.75)),
+            wholesalePrice: Math.max(0, Number(p.wholesalePrice || round2(selling * 0.85))),
+            minSellingPrice: Math.max(0, Number(p.minSellingPrice || round2(selling * 0.75))),
             taxable: p.taxable !== false,
-            taxCategory: String(p.taxCategory || "Standard Tangible Goods"),
-            status: (p.status as "Active" | "Inactive") || "Active",
+            taxCategory: "Standard Tangible Goods",
+            status: "Active",
             barcode: String(p.barcode || `8901000${Math.floor(100000 + Math.random() * 899999)}`),
             qrCode: `APEX:${sku}:${String(p.name || "ITEM").toUpperCase().replace(/\s+/g, "-")}`,
-            variants: p.variants || [],
-            attributes: p.attributes || ["Commercial Grade"],
-            pricingLevels: p.pricingLevels || [
+            variants: [],
+            attributes: ["Commercial Grade"],
+            pricingLevels: [
               { tier: "Retail", price: selling, minQty: 1 },
-              { tier: "Wholesale", price: Number(p.wholesalePrice || round2(selling * 0.85)), minQty: 25 },
+              { tier: "Wholesale", price: Math.max(0, Number(p.wholesalePrice || round2(selling * 0.85))), minQty: 25 },
               { tier: "Distributor", price: round2(selling * 0.8), minQty: 100 },
-              { tier: "Enterprise VIP", price: Number(p.minSellingPrice || round2(selling * 0.75)), minQty: 250 },
+              { tier: "Enterprise VIP", price: Math.max(0, Number(p.minSellingPrice || round2(selling * 0.75))), minQty: 250 },
             ],
-            minStockLevel: Number(p.minStockLevel || 50),
-            maxStockLevel: Number(p.maxStockLevel || 1000),
-            reorderLevel: Number(p.reorderLevel || 100),
+            minStockLevel: Math.max(0, Number(p.minStockLevel || 50)),
+            maxStockLevel: Math.max(0, Number(p.maxStockLevel || 1000)),
+            reorderLevel: Math.max(0, Number(p.reorderLevel || 100)),
             createdAt: now,
             updatedAt: now,
           };
+          if (!created.name) throw new Error("Product name is required.");
           state.products.unshift(created);
-          const openingQty = Number((payload as Record<string, unknown>).openingStock || 0);
+          const openingQty = Math.max(0, Number(payload.openingStock || 0));
+          const defaultWh = state.warehouses[0]?.id || "wh-main";
+          state.inventoryLots.unshift({
+            id: uid("lot"),
+            productId: created.id,
+            warehouseId: defaultWh,
+            batchNo: `BCH-${sku.slice(-3)}-${today.replace(/-/g, "").slice(2, 6)}`,
+            lotNo: `LOT-${Math.floor(100 + Math.random() * 900)}`,
+            serialPrefix: `${sku.slice(-3)}-`,
+            openingStock: openingQty,
+            availableStock: openingQty,
+            reservedStock: 0,
+            damagedStock: 0,
+            returnedStock: 0,
+            unitCost: created.purchasePrice,
+            receivedDate: today,
+          });
           if (openingQty > 0) {
-            const defaultWh = state.warehouses[0]?.id || "wh-ny";
-            state.inventoryLots.unshift({
-              id: uid("lot"),
-              productId: created.id,
-              warehouseId: defaultWh,
-              batchNo: `BCH-${sku.slice(-3)}-${today.replace(/-/g, "").slice(2, 6)}`,
-              lotNo: `LOT-${Math.floor(100 + Math.random() * 900)}A`,
-              serialPrefix: `${sku.slice(-3)}-`,
-              openingStock: openingQty,
-              availableStock: openingQty,
-              reservedStock: 0,
-              damagedStock: 0,
-              returnedStock: 0,
-              unitCost: created.purchasePrice,
-              receivedDate: today,
-            });
             state.stockMovements.unshift({
               id: uid("mov"),
               date: now,
@@ -195,15 +223,15 @@ export async function POST(req: NextRequest) {
               newQty: openingQty,
               unitCost: created.purchasePrice,
               referenceNo: `OPN-${sku}`,
-              notes: "Initial product opening stock",
-              performedBy: session.name,
+              notes: "Initial opening stock",
+              performedBy: liveUser.name,
             });
-            changed.add("inventoryLots");
             changed.add("stockMovements");
           }
+          changed.add("inventoryLots");
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "CREATE",
             module: "Products",
             recordId: created.sku,
@@ -220,13 +248,14 @@ export async function POST(req: NextRequest) {
 
       case "product:delete": {
         requirePerm("delete");
-        const id = String(payload.id);
+        const id = String(payload.id || "");
         const prod = state.products.find((p) => p.id === id);
         if (prod) {
           state.products = state.products.filter((p) => p.id !== id);
+          state.inventoryLots = state.inventoryLots.filter((l) => l.productId !== id);
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "DELETE",
             module: "Products",
             recordId: prod.sku,
@@ -236,6 +265,7 @@ export async function POST(req: NextRequest) {
             device,
           });
           changed.add("products");
+          changed.add("inventoryLots");
           message = `Product ${prod.name} removed.`;
         }
         break;
@@ -278,11 +308,9 @@ export async function POST(req: NextRequest) {
         }
 
         const prevQty = lot.availableStock;
-        if (type === "Stock In") {
-          lot.availableStock += Math.abs(qty);
-        } else if (type === "Stock Out") {
-          lot.availableStock = Math.max(0, lot.availableStock - Math.abs(qty));
-        } else if (type === "Damaged") {
+        if (type === "Stock In") lot.availableStock += Math.abs(qty);
+        else if (type === "Stock Out") lot.availableStock = Math.max(0, lot.availableStock - Math.abs(qty));
+        else if (type === "Damaged") {
           const dmg = Math.min(lot.availableStock, Math.abs(qty));
           lot.availableStock -= dmg;
           lot.damagedStock += dmg;
@@ -290,8 +318,16 @@ export async function POST(req: NextRequest) {
           lot.returnedStock += Math.abs(qty);
           lot.availableStock += Math.abs(qty);
         } else {
-          // Adjustment / Audit sets delta
           lot.availableStock = Math.max(0, lot.availableStock + qty);
+        }
+
+        // Sync Merchandise Inventory GL Account (1300)
+        const invAcc = state.accounts.find((a) => a.code === "1300");
+        if (invAcc) {
+          invAcc.balance = round2(
+            state.inventoryLots.reduce((s, l) => s + l.availableStock * l.unitCost, 0)
+          );
+          changed.add("accounts");
         }
 
         state.stockMovements.unshift({
@@ -306,18 +342,18 @@ export async function POST(req: NextRequest) {
           unitCost: product.purchasePrice,
           referenceNo: `ADJ-${Date.now().toString().slice(-5)}`,
           batchNo: lot.batchNo,
-          notes: notes || `${type} processed`,
-          performedBy: session.name,
+          notes: String(notes || `${type} processed`),
+          performedBy: liveUser.name,
         });
 
         const totalStock = state.inventoryLots
           .filter((l) => l.productId === productId)
           .reduce((s, l) => s + l.availableStock, 0);
-        if (totalStock < product.reorderLevel) {
+        if (totalStock <= product.reorderLevel) {
           state.notifications.unshift({
             id: uid("not"),
             title: `Low Stock Alert: ${product.name}`,
-            message: `Available stock (${totalStock} ${product.uom}s) is below reorder level (${product.reorderLevel}).`,
+            message: `Available stock (${totalStock} ${product.uom}s) is at or below reorder level (${product.reorderLevel}).`,
             category: "Low Stock",
             severity: "warning",
             read: false,
@@ -328,8 +364,8 @@ export async function POST(req: NextRequest) {
         }
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Inventory",
           recordId: product.sku,
@@ -342,7 +378,7 @@ export async function POST(req: NextRequest) {
 
         changed.add("inventoryLots");
         changed.add("stockMovements");
-        message = `Inventory ${type} recorded for ${product.name}.`;
+        message = `Inventory ${type} committed for ${product.name}.`;
         break;
       }
 
@@ -404,13 +440,13 @@ export async function POST(req: NextRequest) {
           unitCost: product.purchasePrice,
           referenceNo: `TRF-${Date.now().toString().slice(-5)}`,
           batchNo: fromLot.batchNo,
-          notes: notes || "Inter-warehouse transfer",
-          performedBy: session.name,
+          notes: String(notes || "Inter-warehouse transfer"),
+          performedBy: liveUser.name,
         });
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Inventory",
           recordId: product.sku,
@@ -435,44 +471,57 @@ export async function POST(req: NextRequest) {
           const prev = state.customers[idx];
           state.customers[idx] = {
             ...prev,
-            ...c,
-            creditLimit: Number(c.creditLimit ?? prev.creditLimit),
+            companyName: String(c.companyName ?? prev.companyName).trim(),
+            contactPerson: String(c.contactPerson ?? prev.contactPerson).trim(),
+            phone: String(c.phone ?? prev.phone),
+            email: String(c.email ?? prev.email),
+            billingAddress: String(c.billingAddress ?? prev.billingAddress),
+            shippingAddress: String(c.shippingAddress ?? prev.shippingAddress),
+            state: String(c.state ?? prev.state),
+            taxId: String(c.taxId ?? prev.taxId),
+            taxExempt: c.taxExempt !== undefined ? Boolean(c.taxExempt) : prev.taxExempt,
+            paymentTerms: (c.paymentTerms as Customer["paymentTerms"]) ?? prev.paymentTerms,
+            creditLimit: Math.max(0, Number(c.creditLimit ?? prev.creditLimit)),
+            segment: (c.segment as Customer["segment"]) ?? prev.segment,
+            notes: String(c.notes ?? prev.notes),
           };
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "UPDATE",
             module: "Customers",
             recordId: prev.customerCode,
-            summary: `Updated customer profile ${state.customers[idx].companyName}`,
+            summary: `Updated customer ${state.customers[idx].companyName}`,
             ipAddress: ip,
             device,
           });
           message = `Customer ${state.customers[idx].companyName} updated.`;
         } else {
-          const opening = Number(c.openingBalance || 0);
+          const opening = round2(Number(c.openingBalance || 0));
+          const companyName = String(c.companyName || "").trim();
+          if (!companyName) throw new Error("Company name is required.");
           const newCust: Customer = {
             id: uid("cust"),
             customerCode: c.customerCode || `CUS-${1001 + state.customers.length}`,
-            companyName: String(c.companyName || "New Enterprise Client"),
-            contactPerson: String(c.contactPerson || ""),
+            companyName,
+            contactPerson: String(c.contactPerson || "").trim(),
             phone: String(c.phone || ""),
             email: String(c.email || ""),
             billingAddress: String(c.billingAddress || ""),
             shippingAddress: String(c.shippingAddress || c.billingAddress || ""),
-            state: String(c.state || "NY"),
+            state: String(c.state || state.settings.defaultTaxState || "NY"),
             customerType: (c.customerType as Customer["customerType"]) || "B2B Enterprise",
             category: String(c.category || "Commercial"),
             segment: (c.segment as Customer["segment"]) || "Standard",
             taxId: String(c.taxId || ""),
             taxExempt: Boolean(c.taxExempt),
             paymentTerms: (c.paymentTerms as Customer["paymentTerms"]) || "Net 30",
-            creditLimit: Number(c.creditLimit || 25000),
+            creditLimit: Math.max(0, Number(c.creditLimit || 25000)),
             openingBalance: opening,
             currentBalance: opening,
             notes: String(c.notes || ""),
-            branchId: String(c.branchId || session.branchId || "br-ny"),
-            salesRepId: String(c.salesRepId || state.employees[0]?.id || "emp-1"),
+            branchId: String(c.branchId || liveUser.branchId || state.branches[0]?.id || "br-hq"),
+            salesRepId: String(c.salesRepId || state.employees[0]?.id || ""),
             tasks: [],
             communications: [],
             createdAt: new Date().toISOString(),
@@ -494,16 +543,16 @@ export async function POST(req: NextRequest) {
             changed.add("ledgerEntries");
           }
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "CREATE",
             module: "Customers",
             recordId: newCust.customerCode,
-            summary: `Created customer ${newCust.companyName} (Credit Limit $${newCust.creditLimit.toLocaleString()})`,
+            summary: `Created customer ${newCust.companyName}`,
             ipAddress: ip,
             device,
           });
-          message = `Customer ${newCust.companyName} added.`;
+          message = `Customer ${newCust.companyName} saved to MongoDB.`;
         }
         changed.add("customers");
         break;
@@ -522,15 +571,15 @@ export async function POST(req: NextRequest) {
         if (!customer) throw new Error("Customer not found");
         customer.tasks.unshift({
           id: uid("task"),
-          title,
+          title: String(title).trim(),
           dueDate: dueDate || today,
           priority: priority || "Medium",
           status: "Open",
-          assignedTo: session.name,
+          assignedTo: liveUser.name,
           type: type || "Follow-up",
         });
         changed.add("customers");
-        message = "CRM reminder added.";
+        message = "CRM follow-up reminder saved.";
         break;
       }
 
@@ -546,12 +595,12 @@ export async function POST(req: NextRequest) {
         customer.communications.unshift({
           id: uid("comm"),
           date: today,
-          author: session.name,
+          author: liveUser.name,
           channel: channel || "Note",
-          summary,
+          summary: String(summary).trim(),
         });
         changed.add("customers");
-        message = "Customer communication logged.";
+        message = "Communication logged.";
         break;
       }
 
@@ -583,8 +632,8 @@ export async function POST(req: NextRequest) {
         };
 
         const customer = state.customers.find((c) => c.id === customerId);
-        if (!customer) throw new Error("Please select a valid customer.");
-        if (!items || items.length === 0) throw new Error("Add at least one line item.");
+        if (!customer) throw new Error("Please select or create a customer first.");
+        if (!Array.isArray(items) || items.length === 0) throw new Error("Add at least one line item.");
 
         const taxRule = state.taxRules.find((t) => t.stateCode === customer.state && t.active);
         const effectiveTaxRate = customer.taxExempt
@@ -594,19 +643,21 @@ export async function POST(req: NextRequest) {
         let subtotal = 0;
         let discountTotal = 0;
         let taxableBase = 0;
+        let totalCogs = 0;
         const lineItems: OrderLineItem[] = [];
 
         for (const item of items) {
           const prod = state.products.find((p) => p.id === item.productId);
           if (!prod) continue;
           const qty = Math.max(1, Number(item.quantity));
-          const unitPrice = Number(item.unitPrice || prod.sellingPrice);
+          const unitPrice = Math.max(0, Number(item.unitPrice || prod.sellingPrice));
           const discPct = Math.min(100, Math.max(0, Number(item.discountPercent || 0)));
           const gross = qty * unitPrice;
           const disc = round2(gross * (discPct / 100));
           const lineTotal = round2(gross - disc);
           subtotal = round2(subtotal + gross);
           discountTotal = round2(discountTotal + disc);
+          totalCogs = round2(totalCogs + prod.purchasePrice * qty);
           if (prod.taxable) taxableBase = round2(taxableBase + lineTotal);
 
           lineItems.push({
@@ -626,8 +677,8 @@ export async function POST(req: NextRequest) {
         const taxTotal = round2(taxableBase * (effectiveTaxRate / 100));
         const grandTotal = round2(subtotal - discountTotal + taxTotal);
 
-        const orderSeq = String(state.salesOrders.length + 101).padStart(4, "0");
-        const orderNo = `${state.settings.orderPrefix}${orderSeq}`;
+        const orderSeq = String(state.salesOrders.length + 1).padStart(4, "0");
+        const orderNo = `${state.settings.orderPrefix}${yearStr}-${orderSeq}`;
         const orderId = uid("so");
 
         const newOrder: SalesOrder = {
@@ -636,8 +687,8 @@ export async function POST(req: NextRequest) {
           date: today,
           customerId,
           branchId: branchId || customer.branchId,
-          warehouseId: warehouseId || state.warehouses[0]?.id || "wh-ny",
-          salesRepId: salesRepId || customer.salesRepId,
+          warehouseId: warehouseId || state.warehouses[0]?.id || "wh-main",
+          salesRepId: salesRepId || customer.salesRepId || "",
           items: lineItems,
           subtotal,
           discountTotal,
@@ -646,8 +697,8 @@ export async function POST(req: NextRequest) {
           grandTotal,
           status,
           paymentStatus: "Unpaid",
-          notes: notes || "",
-          createdBy: session.name,
+          notes: String(notes || ""),
+          createdBy: liveUser.name,
         };
 
         // Deduct inventory
@@ -672,20 +723,19 @@ export async function POST(req: NextRequest) {
               unitCost: li.costBasis,
               referenceNo: orderNo,
               batchNo: lot.batchNo,
-              notes: `Sales order fulfillment — ${customer.companyName}`,
-              performedBy: session.name,
+              notes: `Order dispatch — ${customer.companyName}`,
+              performedBy: liveUser.name,
             });
           }
         }
         changed.add("inventoryLots");
         changed.add("stockMovements");
 
-        // Credit limit check notification
-        if (customer.currentBalance + grandTotal > customer.creditLimit) {
+        if (customer.creditLimit > 0 && customer.currentBalance + grandTotal > customer.creditLimit) {
           state.notifications.unshift({
             id: uid("not"),
             title: `Credit Limit Exceeded: ${customer.companyName}`,
-            message: `New order ${orderNo} ($${grandTotal.toLocaleString()}) pushes balance above $${customer.creditLimit.toLocaleString()} limit.`,
+            message: `Order ${orderNo} ($${grandTotal.toLocaleString()}) exceeds credit limit ($${customer.creditLimit.toLocaleString()}).`,
             category: "Credit Limit",
             severity: "critical",
             read: false,
@@ -696,8 +746,8 @@ export async function POST(req: NextRequest) {
         }
 
         if (generateInvoice) {
-          const invSeq = String(state.invoices.length + 105).padStart(4, "0");
-          const invoiceNo = `${state.settings.invoicePrefix}${invSeq}`;
+          const invSeq = String(state.invoices.length + 1).padStart(4, "0");
+          const invoiceNo = `${state.settings.invoicePrefix}${yearStr}-${invSeq}`;
           const daysToAdd =
             customer.paymentTerms === "Net 15"
               ? 15
@@ -732,13 +782,12 @@ export async function POST(req: NextRequest) {
             amountPaid: 0,
             balanceDue: grandTotal,
             status: "Sent",
-            notes: notes || `Generated from ${orderNo}`,
+            notes: String(notes || `Generated from ${orderNo}`),
             termsAndConditions: `${customer.paymentTerms}. Remit in USD to ${state.settings.legalName}.`,
           };
           newOrder.invoiceId = inv.id;
           state.invoices.unshift(inv);
 
-          // Append Customer Ledger Debit
           state.ledgerEntries.push({
             id: uid("led"),
             customerId,
@@ -753,34 +802,48 @@ export async function POST(req: NextRequest) {
           });
           recalcCustomerLedger(state, customerId);
 
-          // Post GL Journal Entry & update Accounts
+          // Double-entry Sales + COGS Journal Entry
+          const netRevenue = round2(subtotal - discountTotal);
           const je: JournalEntry = {
             id: uid("je"),
-            entryNo: `JE-2026-${String(state.journalEntries.length + 302).padStart(4, "0")}`,
+            entryNo: `JE-${yearStr}-${String(state.journalEntries.length + 1).padStart(4, "0")}`,
             date: today,
-            description: `Sales revenue recognition — ${invoiceNo} (${customer.companyName})`,
+            description: `Sales revenue & COGS — ${invoiceNo} (${customer.companyName})`,
             reference: invoiceNo,
             period: today.slice(0, 7),
             lines: [
               { accountId: "acc-1200", accountCode: "1200", accountName: "Accounts Receivable (Trade)", debit: grandTotal, credit: 0 },
-              { accountId: "acc-4000", accountCode: "4000", accountName: "Product Sales Revenue", debit: 0, credit: round2(subtotal - discountTotal) },
+              { accountId: "acc-4000", accountCode: "4000", accountName: "Product Sales Revenue", debit: 0, credit: netRevenue },
               ...(taxTotal > 0
                 ? [{ accountId: "acc-2100", accountCode: "2100", accountName: "US State Sales Tax Payable", debit: 0, credit: taxTotal }]
                 : []),
+              ...(totalCogs > 0
+                ? [
+                    { accountId: "acc-5000", accountCode: "5000", accountName: "Cost of Goods Sold (COGS)", debit: totalCogs, credit: 0 },
+                    { accountId: "acc-1300", accountCode: "1300", accountName: "Merchandise Inventory Asset", debit: 0, credit: totalCogs },
+                  ]
+                : []),
             ],
             status: "Posted",
-            createdBy: session.name,
+            createdBy: liveUser.name,
           };
           state.journalEntries.unshift(je);
 
           const arAcc = state.accounts.find((a) => a.code === "1200");
           const revAcc = state.accounts.find((a) => a.code === "4000");
           const taxAcc = state.accounts.find((a) => a.code === "2100");
+          const cogsAcc = state.accounts.find((a) => a.code === "5000");
+          const invAcc = state.accounts.find((a) => a.code === "1300");
           if (arAcc) arAcc.balance = round2(arAcc.balance + grandTotal);
-          if (revAcc) revAcc.balance = round2(revAcc.balance + round2(subtotal - discountTotal));
+          if (revAcc) revAcc.balance = round2(revAcc.balance + netRevenue);
           if (taxAcc) taxAcc.balance = round2(taxAcc.balance + taxTotal);
+          if (cogsAcc) cogsAcc.balance = round2(cogsAcc.balance + totalCogs);
+          if (invAcc) {
+            invAcc.balance = round2(
+              state.inventoryLots.reduce((s, l) => s + l.availableStock * l.unitCost, 0)
+            );
+          }
 
-          // Update Sales Rep Commission
           const rep = state.employees.find((e) => e.id === newOrder.salesRepId);
           if (rep && rep.isSalesRep) {
             rep.monthlySales = round2(rep.monthlySales + grandTotal);
@@ -813,13 +876,13 @@ export async function POST(req: NextRequest) {
         });
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Sales & Invoicing",
           recordId: orderNo,
           summary: `Created sales order ${orderNo} for ${customer.companyName} ($${grandTotal.toLocaleString()})`,
-          newValue: JSON.stringify({ orderNo, grandTotal, items: lineItems.length }),
+          newValue: JSON.stringify({ orderNo, grandTotal }),
           ipAddress: ip,
           device,
         });
@@ -827,7 +890,7 @@ export async function POST(req: NextRequest) {
         changed.add("salesOrders");
         changed.add("notifications");
         message = generateInvoice
-          ? `Sales Order ${orderNo} & US Invoice generated successfully.`
+          ? `Sales Order ${orderNo} & US Invoice posted live.`
           : `Sales Order ${orderNo} created.`;
         break;
       }
@@ -840,8 +903,7 @@ export async function POST(req: NextRequest) {
         const prev = order.status;
         order.status = status;
 
-        if (status === "Returned" || status === "Cancelled") {
-          // Restock items if cancelled/returned
+        if ((status === "Returned" || status === "Cancelled") && prev !== "Returned" && prev !== "Cancelled") {
           for (const li of order.items) {
             const lot = state.inventoryLots.find(
               (l) => l.productId === li.productId && l.warehouseId === order.warehouseId
@@ -851,7 +913,6 @@ export async function POST(req: NextRequest) {
               if (status === "Returned") lot.returnedStock += li.quantity;
             }
           }
-          // Credit ledger if invoiced
           if (order.invoiceId) {
             const inv = state.invoices.find((i) => i.id === order.invoiceId);
             if (inv && inv.status !== "Cancelled" && inv.status !== "Credited") {
@@ -879,12 +940,12 @@ export async function POST(req: NextRequest) {
         }
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Sales",
           recordId: order.orderNo,
-          summary: `Order ${order.orderNo} status changed: ${prev} → ${status}`,
+          summary: `Order ${order.orderNo} status: ${prev} → ${status}`,
           previousValue: prev,
           newValue: status,
           ipAddress: ip,
@@ -910,7 +971,7 @@ export async function POST(req: NextRequest) {
         else if (op === "cancel" || op === "duplicate") requirePerm("edit");
 
         if (op === "duplicate") {
-          const dupNo = `${state.settings.invoicePrefix}${String(state.invoices.length + 106).padStart(4, "0")}`;
+          const dupNo = `${state.settings.invoicePrefix}${yearStr}-${String(state.invoices.length + 1).padStart(4, "0")}`;
           const copy: Invoice = {
             ...inv,
             id: uid("inv"),
@@ -953,32 +1014,55 @@ export async function POST(req: NextRequest) {
           changed.add("customers");
           message = `${op === "refund" ? "Refund" : "Credit Note"} posted for ${inv.invoiceNo}.`;
         } else if (op === "email" || op === "reminder") {
-          const recipient = emailTo || cust?.email || "billing@client.com";
+          const recipient = (emailTo || cust?.email || "").trim();
+          if (!recipient) throw new Error("Customer email address is missing. Update customer profile first.");
+          const subject =
+            op === "reminder"
+              ? `Payment Reminder: Invoice ${inv.invoiceNo} ($${inv.balanceDue.toFixed(2)} Due)`
+              : `Invoice ${inv.invoiceNo} from ${state.settings.legalName}`;
+          const html = `
+            <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">
+              <h2 style="margin:0 0 8px;color:#0f172a;">${state.settings.legalName}</h2>
+              <p style="color:#475569;font-size:14px;">${op === "reminder" ? "Friendly reminder regarding your open invoice balance:" : "Please find your invoice summary below:"}</p>
+              <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;">
+                <tr><td style="padding:6px 0;color:#64748b;">Invoice Number:</td><td style="text-align:right;font-weight:700;">${inv.invoiceNo}</td></tr>
+                <tr><td style="padding:6px 0;color:#64748b;">Issue / Due Date:</td><td style="text-align:right;">${inv.issueDate} / ${inv.dueDate}</td></tr>
+                <tr><td style="padding:6px 0;color:#64748b;">Total Amount:</td><td style="text-align:right;">$${inv.total.toFixed(2)}</td></tr>
+                <tr><td style="padding:6px 0;color:#64748b;">Balance Due:</td><td style="text-align:right;font-weight:700;color:#dc2626;">$${inv.balanceDue.toFixed(2)}</td></tr>
+              </table>
+              <p style="color:#64748b;font-size:12px;">${state.settings.emailSignature}</p>
+            </div>`;
+          const text = `${subject}\nInvoice: ${inv.invoiceNo}\nDue: ${inv.dueDate}\nBalance Due: $${inv.balanceDue.toFixed(2)}`;
+          const dispatch = await sendEnterpriseEmail({ to: recipient, subject, html, text });
+
           state.emailLogs.unshift({
             id: uid("em"),
             sentAt: new Date().toISOString(),
             to: recipient,
-            subject:
-              op === "reminder"
-                ? `Payment Reminder: Invoice ${inv.invoiceNo} ($${inv.balanceDue.toLocaleString()} Due)`
-                : `Invoice ${inv.invoiceNo} from ${state.settings.legalName}`,
+            subject,
             template: op === "reminder" ? "Overdue Reminder" : "Invoice",
             referenceNo: inv.invoiceNo,
-            status: process.env.SMTP_HOST ? "Delivered" : "Queued (SMTP Mock)",
+            status: dispatch.status,
+            detail: dispatch.detail,
           });
-          if (op === "reminder") inv.lastReminderSentAt = new Date().toISOString();
+          if (op === "reminder" && dispatch.status === "Delivered (SMTP)") {
+            inv.lastReminderSentAt = new Date().toISOString();
+          }
           changed.add("emailLogs");
           changed.add("invoices");
-          message = `${op === "reminder" ? "Payment reminder" : "Invoice"} dispatched to ${recipient}.`;
+          message =
+            dispatch.status === "Delivered (SMTP)"
+              ? `Live SMTP email delivered to ${recipient}.`
+              : `${dispatch.status}: ${dispatch.detail}`;
         } else if (op === "collection_note") {
-          inv.collectionNotes = note || "";
+          inv.collectionNotes = String(note || "");
           changed.add("invoices");
           message = "Collection note saved.";
         }
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Invoices",
           recordId: inv.invoiceNo,
@@ -1016,7 +1100,7 @@ export async function POST(req: NextRequest) {
         const customer = state.customers.find((c) => c.id === customerId);
         if (!customer) throw new Error("Customer not found.");
 
-        const receiptNo = `${state.settings.receiptPrefix}${String(state.payments.length + 43).padStart(4, "0")}`;
+        const receiptNo = `${state.settings.receiptPrefix}${yearStr}-${String(state.payments.length + 1).padStart(4, "0")}`;
         const allocations: Payment["allocations"] = [];
 
         if (invoiceId) {
@@ -1054,11 +1138,11 @@ export async function POST(req: NextRequest) {
           method: method || "Bank Transfer (ACH)",
           paymentType,
           amount: amt,
-          reference: reference || `REF-${Date.now().toString().slice(-6)}`,
+          reference: String(reference || `REF-${Date.now().toString().slice(-6)}`),
           allocations,
           reconciled: method === "Cash" || method === "Credit Card",
-          notes: notes || "",
-          recordedBy: session.name,
+          notes: String(notes || ""),
+          recordedBy: liveUser.name,
         };
         state.payments.unshift(payment);
 
@@ -1080,7 +1164,6 @@ export async function POST(req: NextRequest) {
         state.ledgerEntries.push(ledgerEntry);
         recalcCustomerLedger(state, customerId);
 
-        // Update Accounting & GL
         const cashCode = method === "Cash" ? "1000" : "1010";
         const cashAcc = state.accounts.find((a) => a.code === cashCode);
         const arAcc = state.accounts.find((a) => a.code === "1200");
@@ -1094,7 +1177,7 @@ export async function POST(req: NextRequest) {
           }
           state.journalEntries.unshift({
             id: uid("je"),
-            entryNo: `JE-2026-${String(state.journalEntries.length + 302).padStart(4, "0")}`,
+            entryNo: `JE-${yearStr}-${String(state.journalEntries.length + 1).padStart(4, "0")}`,
             date: payment.date,
             description: `${isReversal ? "Payment Reversal" : "Customer Payment"} — ${receiptNo} (${customer.companyName})`,
             reference: receiptNo,
@@ -1109,7 +1192,7 @@ export async function POST(req: NextRequest) {
                   { accountId: arAcc.id, accountCode: arAcc.code, accountName: arAcc.name, debit: 0, credit: amt },
                 ],
             status: "Posted",
-            createdBy: session.name,
+            createdBy: liveUser.name,
           });
           changed.add("accounts");
           changed.add("journalEntries");
@@ -1127,12 +1210,12 @@ export async function POST(req: NextRequest) {
         });
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Payments",
           recordId: receiptNo,
-          summary: `Recorded ${paymentType} payment ${receiptNo} of $${amt.toLocaleString()} for ${customer.companyName}`,
+          summary: `Recorded ${paymentType} payment ${receiptNo} ($${amt.toLocaleString()})`,
           ipAddress: ip,
           device,
         });
@@ -1141,7 +1224,7 @@ export async function POST(req: NextRequest) {
         changed.add("ledgerEntries");
         changed.add("customers");
         changed.add("notifications");
-        message = `Payment ${receiptNo} ($${amt.toLocaleString()}) recorded & ledger updated.`;
+        message = `Payment ${receiptNo} ($${amt.toLocaleString()}) posted live.`;
         break;
       }
 
@@ -1151,7 +1234,7 @@ export async function POST(req: NextRequest) {
         if (pay) {
           pay.reconciled = !pay.reconciled;
           changed.add("payments");
-          message = `Payment ${pay.receiptNo} marked as ${pay.reconciled ? "Reconciled" : "Unreconciled"}.`;
+          message = `Payment ${pay.receiptNo} marked ${pay.reconciled ? "Reconciled" : "Pending"}.`;
         }
         break;
       }
@@ -1175,8 +1258,8 @@ export async function POST(req: NextRequest) {
           customerId,
           date: today,
           type: "Adjustment",
-          referenceNo: referenceNo || `ADJ-${Date.now().toString().slice(-5)}`,
-          description: description || "Manual Ledger Adjustment",
+          referenceNo: String(referenceNo || `ADJ-${Date.now().toString().slice(-5)}`),
+          description: String(description || "Manual Ledger Adjustment"),
           debit: entryType === "Debit" ? amt : 0,
           credit: entryType === "Credit" ? amt : 0,
           runningBalance: 0,
@@ -1185,8 +1268,8 @@ export async function POST(req: NextRequest) {
         recalcCustomerLedger(state, customerId);
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Customer Ledger",
           recordId: cust.customerCode,
@@ -1203,28 +1286,30 @@ export async function POST(req: NextRequest) {
       case "supplier:save": {
         requirePerm("create");
         const s = payload as Partial<Supplier>;
+        const companyName = String(s.companyName || "").trim();
+        if (!companyName) throw new Error("Supplier company name is required.");
         const newSup: Supplier = {
           id: uid("sup"),
           vendorCode: s.vendorCode || `VND-${501 + state.suppliers.length}`,
-          companyName: String(s.companyName || "New Vendor Corp."),
+          companyName,
           contactPerson: String(s.contactPerson || ""),
           phone: String(s.phone || ""),
           email: String(s.email || ""),
           address: String(s.address || ""),
           state: String(s.state || "TX"),
           paymentTerms: String(s.paymentTerms || "Net 30"),
-          openingPayable: Number(s.openingPayable || 0),
-          currentPayable: Number(s.openingPayable || 0),
-          rating: Number(s.rating || 4.7),
-          onTimeDeliveryRate: Number(s.onTimeDeliveryRate || 95),
+          openingPayable: Math.max(0, Number(s.openingPayable || 0)),
+          currentPayable: Math.max(0, Number(s.openingPayable || 0)),
+          rating: Number(s.rating || 5.0),
+          onTimeDeliveryRate: Number(s.onTimeDeliveryRate || 100),
           category: String(s.category || "Raw Materials"),
           status: "Active",
         };
         state.suppliers.unshift(newSup);
         changed.add("suppliers");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Suppliers",
           recordId: newSup.vendorCode,
@@ -1248,11 +1333,11 @@ export async function POST(req: NextRequest) {
         };
         const sup = state.suppliers.find((s) => s.id === supplierId);
         const prod = state.products.find((p) => p.id === productId);
-        if (!sup || !prod) throw new Error("Select a valid supplier and product.");
+        if (!sup || !prod) throw new Error("Please select a valid supplier and product.");
         const qty = Math.max(1, Number(quantity));
-        const cost = Number(unitCost || prod.purchasePrice);
+        const cost = Math.max(0, Number(unitCost || prod.purchasePrice));
         const total = round2(qty * cost);
-        const poNo = `${state.settings.poPrefix}${String(state.purchaseOrders.length + 45).padStart(4, "0")}`;
+        const poNo = `${state.settings.poPrefix}${yearStr}-${String(state.purchaseOrders.length + 1).padStart(4, "0")}`;
 
         const po: PurchaseOrder = {
           id: uid("po"),
@@ -1260,8 +1345,8 @@ export async function POST(req: NextRequest) {
           date: today,
           expectedDate: new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10),
           supplierId,
-          branchId: session.branchId || "br-ny",
-          warehouseId: warehouseId || state.warehouses[0]?.id || "wh-ny",
+          branchId: liveUser.branchId || state.branches[0]?.id || "br-hq",
+          warehouseId: warehouseId || state.warehouses[0]?.id || "wh-main",
           items: [{ productId: prod.id, productName: prod.name, sku: prod.sku, quantity: qty, unitCost: cost, lineTotal: total }],
           subtotal: total,
           discount: 0,
@@ -1271,29 +1356,28 @@ export async function POST(req: NextRequest) {
           paymentStatus: "Unpaid",
           amountPaid: 0,
           dueDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-          notes: notes || "",
+          notes: String(notes || ""),
         };
         state.purchaseOrders.unshift(po);
 
-        // Automatically queue an Approval Workflow entry
         state.approvals.unshift({
           id: uid("apr"),
-          requestNo: `APR-2026-${String(state.approvals.length + 84).padStart(3, "0")}`,
+          requestNo: `APR-${yearStr}-${String(state.approvals.length + 1).padStart(3, "0")}`,
           type: "Purchase",
           referenceNo: poNo,
-          title: `Purchase Order ${poNo} — ${qty} x ${prod.name} (${sup.companyName})`,
+          title: `Purchase Order ${poNo} — ${qty} × ${prod.name} (${sup.companyName})`,
           amount: total,
-          requestedBy: session.name,
+          requestedBy: liveUser.name,
           requestedAt: new Date().toISOString(),
           currentStage: "Manager",
           status: "Pending",
-          notes: notes || "Purchase order awaiting management approval",
+          notes: String(notes || "Purchase order awaiting approval"),
           history: [
             {
               stage: "Salesperson",
-              actor: session.name,
+              actor: liveUser.name,
               action: "Submitted",
-              comment: `Created ${poNo}`,
+              comment: `Issued ${poNo}`,
               timestamp: new Date().toISOString(),
             },
           ],
@@ -1302,12 +1386,12 @@ export async function POST(req: NextRequest) {
         changed.add("purchaseOrders");
         changed.add("approvals");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Purchasing",
           recordId: poNo,
-          summary: `Created ${poNo} ($${total.toLocaleString()}) with ${sup.companyName}`,
+          summary: `Created ${poNo} ($${total.toLocaleString()})`,
           ipAddress: ip,
           device,
         });
@@ -1346,6 +1430,7 @@ export async function POST(req: NextRequest) {
           }
           const prev = lot.availableStock;
           lot.availableStock += item.quantity;
+          lot.unitCost = item.unitCost;
           state.stockMovements.unshift({
             id: uid("mov"),
             date: new Date().toISOString(),
@@ -1359,7 +1444,7 @@ export async function POST(req: NextRequest) {
             referenceNo: po.poNo,
             batchNo: lot.batchNo,
             notes: `Goods received against ${po.poNo}`,
-            performedBy: session.name,
+            performedBy: liveUser.name,
           });
         }
 
@@ -1368,7 +1453,11 @@ export async function POST(req: NextRequest) {
         const apAcc = state.accounts.find((a) => a.code === "2000");
         const invAcc = state.accounts.find((a) => a.code === "1300");
         if (apAcc) apAcc.balance = round2(apAcc.balance + po.total);
-        if (invAcc) invAcc.balance = round2(invAcc.balance + po.total);
+        if (invAcc) {
+          invAcc.balance = round2(
+            state.inventoryLots.reduce((s, l) => s + l.availableStock * l.unitCost, 0)
+          );
+        }
 
         changed.add("purchaseOrders");
         changed.add("inventoryLots");
@@ -1376,8 +1465,8 @@ export async function POST(req: NextRequest) {
         changed.add("suppliers");
         changed.add("accounts");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Purchasing",
           recordId: po.poNo,
@@ -1407,8 +1496,8 @@ export async function POST(req: NextRequest) {
         changed.add("suppliers");
         changed.add("accounts");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
           module: "Accounts Payable",
           recordId: po.poNo,
@@ -1416,7 +1505,7 @@ export async function POST(req: NextRequest) {
           ipAddress: ip,
           device,
         });
-        message = `Vendor payment of $${amt.toLocaleString()} recorded for ${po.poNo}.`;
+        message = `Vendor payment of $${amt.toLocaleString()} recorded.`;
         break;
       }
 
@@ -1452,23 +1541,23 @@ export async function POST(req: NextRequest) {
           };
         });
 
-        const entryNo = `JE-2026-${String(state.journalEntries.length + 305).padStart(4, "0")}`;
+        const entryNo = `JE-${yearStr}-${String(state.journalEntries.length + 1).padStart(4, "0")}`;
         state.journalEntries.unshift({
           id: uid("je"),
           entryNo,
           date: today,
-          description: description || "Manual Journal Entry",
-          reference: reference || entryNo,
+          description: String(description || "Manual Journal Entry"),
+          reference: String(reference || entryNo),
           period: today.slice(0, 7),
           lines: resolvedLines,
           status: "Posted",
-          createdBy: session.name,
+          createdBy: liveUser.name,
         });
         changed.add("journalEntries");
         changed.add("accounts");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "General Ledger",
           recordId: entryNo,
@@ -1502,18 +1591,20 @@ export async function POST(req: NextRequest) {
       case "expense:save": {
         requirePerm("create");
         const e = payload as Partial<Expense>;
-        const expNo = `EXP-2026-${String(state.expenses.length + 1120)}`;
+        const expNo = `EXP-${yearStr}-${String(state.expenses.length + 1).padStart(4, "0")}`;
+        const amount = round2(Math.max(0, Number(e.amount || 0)));
+        if (amount <= 0) throw new Error("Expense amount must be greater than zero.");
         const created: Expense = {
           id: uid("exp"),
           expenseNo: expNo,
           date: e.date || today,
           category: String(e.category || "Operations"),
           description: String(e.description || "Business Expense"),
-          amount: round2(Number(e.amount || 0)),
-          budgetAmount: round2(Number(e.budgetAmount || e.amount || 0)),
+          amount,
+          budgetAmount: round2(Number(e.budgetAmount || amount)),
           department: String(e.department || "Operations"),
-          branchId: String(e.branchId || session.branchId || "br-ny"),
-          vendorName: String(e.vendorName || "General Vendor"),
+          branchId: String(e.branchId || liveUser.branchId || state.branches[0]?.id || "br-hq"),
+          vendorName: String(e.vendorName || "Vendor"),
           paymentMethod: (e.paymentMethod as PaymentMethod) || "Bank Transfer (ACH)",
           recurring: Boolean(e.recurring),
           recurringCycle: e.recurring ? (e.recurringCycle || "Monthly") : undefined,
@@ -1521,18 +1612,36 @@ export async function POST(req: NextRequest) {
           receiptRef: e.receiptRef || `REC-${Date.now().toString().slice(-4)}`,
         };
         state.expenses.unshift(created);
+        // Queue for Approval Workflow
+        state.approvals.unshift({
+          id: uid("apr"),
+          requestNo: `APR-${yearStr}-${String(state.approvals.length + 1).padStart(3, "0")}`,
+          type: "Expense",
+          referenceNo: expNo,
+          title: `${created.category}: ${created.description}`,
+          amount,
+          requestedBy: liveUser.name,
+          requestedAt: new Date().toISOString(),
+          currentStage: "Manager",
+          status: "Pending",
+          notes: `Dept: ${created.department}`,
+          history: [
+            { stage: "Salesperson", actor: liveUser.name, action: "Submitted", comment: `Logged ${expNo}`, timestamp: new Date().toISOString() },
+          ],
+        });
         changed.add("expenses");
+        changed.add("approvals");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Expenses",
           recordId: expNo,
-          summary: `Logged expense ${expNo} ($${created.amount.toLocaleString()}) — ${created.category}`,
+          summary: `Logged expense ${expNo} ($${amount.toLocaleString()})`,
           ipAddress: ip,
           device,
         });
-        message = `Expense ${expNo} submitted.`;
+        message = `Expense ${expNo} submitted & routed for approval.`;
         break;
       }
 
@@ -1540,7 +1649,32 @@ export async function POST(req: NextRequest) {
         requirePerm("approve");
         const exp = state.expenses.find((x) => x.id === payload.expenseId);
         if (exp) {
+          const prev = exp.status;
           exp.status = payload.status as Expense["status"];
+          if ((exp.status === "Approved" || exp.status === "Paid") && prev === "Pending") {
+            const opEx = state.accounts.find((a) => a.code === "6300");
+            const bank = state.accounts.find((a) => a.code === "1010");
+            if (opEx && bank) {
+              opEx.balance = round2(opEx.balance + exp.amount);
+              bank.balance = round2(bank.balance - exp.amount);
+              state.journalEntries.unshift({
+                id: uid("je"),
+                entryNo: `JE-${yearStr}-${String(state.journalEntries.length + 1).padStart(4, "0")}`,
+                date: today,
+                description: `Expense approved — ${exp.expenseNo} (${exp.category})`,
+                reference: exp.expenseNo,
+                period: today.slice(0, 7),
+                lines: [
+                  { accountId: opEx.id, accountCode: opEx.code, accountName: opEx.name, debit: exp.amount, credit: 0 },
+                  { accountId: bank.id, accountCode: bank.code, accountName: bank.name, debit: 0, credit: exp.amount },
+                ],
+                status: "Posted",
+                createdBy: liveUser.name,
+              });
+              changed.add("accounts");
+              changed.add("journalEntries");
+            }
+          }
           changed.add("expenses");
           message = `Expense ${exp.expenseNo} marked ${exp.status}.`;
         }
@@ -1554,24 +1688,24 @@ export async function POST(req: NextRequest) {
         if (idx >= 0) {
           state.taxRules[idx] = {
             ...state.taxRules[idx],
-            ...t,
             rate: Number(t.rate ?? state.taxRules[idx].rate),
             localSurtax: Number(t.localSurtax ?? state.taxRules[idx].localSurtax),
+            notes: String(t.notes ?? state.taxRules[idx].notes),
           };
         } else {
           state.taxRules.push({
             id: uid("tax"),
-            stateCode: String(t.stateCode || "WA").toUpperCase(),
+            stateCode: String(t.stateCode || "WA").toUpperCase().slice(0, 2),
             stateName: String(t.stateName || "Washington"),
             rate: Number(t.rate || 6.5),
-            localSurtax: Number(t.localSurtax || 1.5),
+            localSurtax: Number(t.localSurtax || 0),
             active: true,
             effectiveDate: today,
             notes: String(t.notes || "US State Sales Tax"),
           });
         }
         changed.add("taxRules");
-        message = "Tax configuration saved.";
+        message = "Tax rule saved.";
         break;
       }
 
@@ -1581,18 +1715,18 @@ export async function POST(req: NextRequest) {
         state.branches.push({
           id: uid("br"),
           code: String(b.code || `BR-${state.branches.length + 1}`).toUpperCase(),
-          name: String(b.name || "New Regional Branch"),
+          name: String(b.name || "Regional Branch"),
           type: (b.type as Branch["type"]) || "Branch",
-          city: String(b.city || "Miami"),
-          state: String(b.state || "FL"),
+          city: String(b.city || ""),
+          state: String(b.state || "NY"),
           address: String(b.address || ""),
           phone: String(b.phone || ""),
-          managerName: String(b.managerName || session.name),
+          managerName: String(b.managerName || liveUser.name),
           status: "Active",
-          monthlyTarget: Number(b.monthlyTarget || 100000),
+          monthlyTarget: Math.max(0, Number(b.monthlyTarget || 0)),
         });
         changed.add("branches");
-        message = "New branch added.";
+        message = "Branch created.";
         break;
       }
 
@@ -1602,11 +1736,11 @@ export async function POST(req: NextRequest) {
         state.warehouses.push({
           id: uid("wh"),
           code: String(w.code || `WH-0${state.warehouses.length + 1}`).toUpperCase(),
-          name: String(w.name || "New Fulfillment Warehouse"),
-          branchId: String(w.branchId || state.branches[0]?.id || "br-ny"),
-          location: String(w.location || "Chicago, IL"),
-          capacityUnits: Number(w.capacityUnits || 25000),
-          manager: String(w.manager || session.name),
+          name: String(w.name || "Warehouse"),
+          branchId: String(w.branchId || state.branches[0]?.id || "br-hq"),
+          location: String(w.location || ""),
+          capacityUnits: Math.max(0, Number(w.capacityUnits || 25000)),
+          manager: String(w.manager || liveUser.name),
           status: "Active",
         });
         changed.add("warehouses");
@@ -1620,15 +1754,15 @@ export async function POST(req: NextRequest) {
         state.employees.unshift({
           id: uid("emp"),
           employeeCode: `EMP-${String(state.employees.length + 1).padStart(3, "0")}`,
-          name: String(e.name || "New Team Member"),
-          email: String(e.email || "staff@apexledger.com"),
-          phone: String(e.phone || "+1 (212) 555-0100"),
+          name: String(e.name || "").trim(),
+          email: String(e.email || "").trim(),
+          phone: String(e.phone || ""),
           department: String(e.department || "Commercial Sales"),
           jobRole: String(e.jobRole || "Account Executive"),
-          branchId: String(e.branchId || "br-ny"),
+          branchId: String(e.branchId || state.branches[0]?.id || "br-hq"),
           isSalesRep: e.isSalesRep !== false,
           commissionType: (e.commissionType as Employee["commissionType"]) || "Percentage",
-          commissionRate: Number(e.commissionRate || 3.5),
+          commissionRate: Math.max(0, Number(e.commissionRate || 0)),
           monthlySales: 0,
           commissionEarned: 0,
           commissionStatus: "Pending",
@@ -1648,16 +1782,16 @@ export async function POST(req: NextRequest) {
           emp.commissionStatus = (payload.status as Employee["commissionStatus"]) || "Approved";
           changed.add("employees");
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "APPROVE",
             module: "Commissions",
             recordId: emp.employeeCode,
-            summary: `Commission ($${emp.commissionEarned.toLocaleString()}) for ${emp.name} marked ${emp.commissionStatus}`,
+            summary: `Commission ($${emp.commissionEarned.toLocaleString()}) for ${emp.name} → ${emp.commissionStatus}`,
             ipAddress: ip,
             device,
           });
-          message = `Commission for ${emp.name} updated to ${emp.commissionStatus}.`;
+          message = `Commission for ${emp.name} marked ${emp.commissionStatus}.`;
         }
         break;
       }
@@ -1678,9 +1812,9 @@ export async function POST(req: NextRequest) {
 
         apr.history.push({
           stage: apr.currentStage,
-          actor: session.name,
+          actor: liveUser.name,
           action: decision,
-          comment: comment || (decision === "Approved" ? "Approved and forwarded" : "Rejected by reviewer"),
+          comment: String(comment || decision),
           timestamp: new Date().toISOString(),
         });
 
@@ -1694,47 +1828,59 @@ export async function POST(req: NextRequest) {
         }
 
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: decision === "Approved" ? "APPROVE" : "REJECT",
           module: "Approval Workflow",
           recordId: apr.requestNo,
-          summary: `${apr.requestNo} (${apr.type}): ${decision} at ${prevStage} → ${apr.currentStage}`,
+          summary: `${apr.requestNo}: ${decision} (${prevStage} → ${apr.currentStage})`,
           previousValue: prevStage,
           newValue: apr.currentStage,
           ipAddress: ip,
           device,
         });
         changed.add("approvals");
-        message = `${apr.requestNo} ${decision === "Approved" ? `advanced to ${apr.currentStage}` : "rejected"}.`;
+        message = `${apr.requestNo} updated.`;
         break;
       }
 
       case "document:add": {
         requirePerm("create");
         const d = payload as Partial<DocumentRecord>;
+        if (d.fileDataUrl && d.fileDataUrl.length > 2_800_000) {
+          throw new Error("File exceeds maximum 2MB upload limit.");
+        }
         state.documents.unshift({
           id: uid("doc"),
-          title: String(d.title || "Enterprise Document"),
+          title: String(d.title || "Enterprise Document").trim(),
           category: (d.category as DocumentRecord["category"]) || "Customer Document",
           relatedEntityType: (d.relatedEntityType as DocumentRecord["relatedEntityType"]) || "Customer",
           relatedEntityName: String(d.relatedEntityName || "General"),
           fileName: String(d.fileName || "document.pdf"),
-          fileSizeKb: Number(d.fileSizeKb || 256),
-          uploadedBy: session.name,
+          fileSizeKb: Math.max(1, Number(d.fileSizeKb || 1)),
+          mimeType: d.mimeType ? String(d.mimeType) : undefined,
+          fileDataUrl: d.fileDataUrl ? String(d.fileDataUrl) : undefined,
+          uploadedBy: liveUser.name,
           uploadedAt: today,
           notes: String(d.notes || ""),
         });
         changed.add("documents");
-        message = "Document attached to Enterprise Vault.";
+        message = "Document saved to MongoDB Vault.";
+        break;
+      }
+
+      case "document:delete": {
+        requirePerm("delete");
+        state.documents = state.documents.filter((x) => x.id !== payload.documentId);
+        changed.add("documents");
+        message = "Document deleted.";
         break;
       }
 
       case "notification:read": {
         const id = payload.id as string | undefined;
-        if (id === "all") {
-          state.notifications.forEach((n) => (n.read = true));
-        } else {
+        if (id === "all") state.notifications.forEach((n) => (n.read = true));
+        else {
           const item = state.notifications.find((n) => n.id === id);
           if (item) item.read = true;
         }
@@ -1753,37 +1899,40 @@ export async function POST(req: NextRequest) {
           branchId: string;
           department: string;
         };
-        if (state.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+        const normalizedEmail = String(email || "").trim().toLowerCase();
+        if (!normalizedEmail || !name) throw new Error("Name and valid email are required.");
+        if (state.users.some((u) => u.email.toLowerCase() === normalizedEmail)) {
           throw new Error("A user with this email already exists.");
         }
         if (state.settings.enforceStrongPasswords) {
-          const check = validateStrongPassword(password);
+          const check = validateStrongPassword(String(password || ""));
           if (!check.valid) throw new Error(`Password policy: ${check.errors.join(", ")}`);
         }
         const roleDef = state.roles.find((r) => r.name === role) || state.roles[2];
-        const passwordHash = await hashPassword(password);
+        const passwordHash = await hashPassword(String(password));
         state.users.push({
           id: uid("usr"),
-          name,
-          email: email.toLowerCase(),
+          name: String(name).trim(),
+          email: normalizedEmail,
           passwordHash,
           role,
-          branchId: branchId || "br-ny",
+          branchId: branchId || state.branches[0]?.id || "br-hq",
           department: department || "Operations",
           status: "Active",
           failedLoginAttempts: 0,
           lockoutUntil: null,
           mfaEnabled: false,
+          tokenVersion: 1,
           permissions: { ...roleDef.permissions },
           createdAt: new Date().toISOString(),
         });
         changed.add("users");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Users & RBAC",
-          recordId: email,
+          recordId: normalizedEmail,
           summary: `Provisioned user ${name} (${role})`,
           ipAddress: ip,
           device,
@@ -1805,6 +1954,65 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "user:lock": {
+        requirePerm("users");
+        const u = state.users.find((x) => x.id === payload.userId);
+        if (u && u.id !== liveUser.id) {
+          u.status = "Locked";
+          u.tokenVersion = (u.tokenVersion || 1) + 1;
+          changed.add("users");
+          appendAudit(state, {
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
+            action: "SECURITY",
+            module: "Users & RBAC",
+            recordId: u.email,
+            summary: `Locked account & revoked active sessions for ${u.email}`,
+            ipAddress: ip,
+            device,
+          });
+          message = `Account ${u.email} locked & all active sessions revoked.`;
+        }
+        break;
+      }
+
+      case "user:change-password": {
+        const { currentPassword, newPassword } = payload as {
+          currentPassword: string;
+          newPassword: string;
+        };
+        const u = state.users.find((x) => x.id === liveUser.id);
+        if (!u) throw new Error("User not found.");
+        const ok = await verifyPassword(String(currentPassword || ""), u.passwordHash);
+        if (!ok) throw new Error("Current password is incorrect.");
+        const check = validateStrongPassword(String(newPassword || ""));
+        if (!check.valid) throw new Error(`Password policy: ${check.errors.join(", ")}`);
+        u.passwordHash = await hashPassword(newPassword);
+        u.tokenVersion = (u.tokenVersion || 1) + 1;
+        changed.add("users");
+        refreshedCookieToken = await signSessionToken({
+          userId: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          branchId: u.branchId,
+          tokenVersion: u.tokenVersion,
+          permissions: u.permissions,
+        });
+        appendAudit(state, {
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
+          action: "SECURITY",
+          module: "Security",
+          recordId: u.id,
+          summary: "Password rotated & prior sessions invalidated",
+          ipAddress: ip,
+          device,
+        });
+        message = "Password updated and prior sessions invalidated.";
+        break;
+      }
+
       case "role:update": {
         requirePerm("users");
         const { roleId, permission, value } = payload as {
@@ -1814,19 +2022,19 @@ export async function POST(req: NextRequest) {
         };
         const role = state.roles.find((r) => r.id === roleId);
         if (role && role.name !== "Admin") {
-          role.permissions[permission] = value;
+          role.permissions[permission] = Boolean(value);
           state.users.forEach((u) => {
-            if (u.role === role.name) u.permissions[permission] = value;
+            if (u.role === role.name) u.permissions[permission] = Boolean(value);
           });
           changed.add("roles");
           changed.add("users");
           appendAudit(state, {
-            actorName: session.name,
-            actorRole: session.role,
+            actorName: liveUser.name,
+            actorRole: liveUser.role,
             action: "SECURITY",
             module: "RBAC Matrix",
             recordId: role.name,
-            summary: `Set ${role.name}.${permission} = ${value}`,
+            summary: `Set ${role.name}.${permission} = ${Boolean(value)}`,
             ipAddress: ip,
             device,
           });
@@ -1836,33 +2044,48 @@ export async function POST(req: NextRequest) {
       }
 
       case "user:dashboard-layout": {
-        const u = state.users.find((x) => x.id === session.userId);
+        const u = state.users.find((x) => x.id === liveUser.id);
         if (u && Array.isArray(payload.layout)) {
-          u.dashboardLayout = payload.layout as string[];
+          u.dashboardLayout = payload.layout.map(String);
           changed.add("users");
-          message = "Executive dashboard layout saved.";
+          message = "Dashboard layout preference saved.";
         }
         break;
       }
 
       case "settings:update": {
         requirePerm("users");
+        const s = payload as Partial<CompanySettings>;
         state.settings = {
           ...state.settings,
-          ...(payload as Partial<CompanySettings>),
+          activeCompany: String(s.activeCompany ?? state.settings.activeCompany),
+          legalName: String(s.legalName ?? state.settings.legalName),
+          ein: String(s.ein ?? state.settings.ein),
+          address: String(s.address ?? state.settings.address),
+          cityStateZip: String(s.cityStateZip ?? state.settings.cityStateZip),
+          phone: String(s.phone ?? state.settings.phone),
+          email: String(s.email ?? state.settings.email),
+          invoicePrefix: String(s.invoicePrefix ?? state.settings.invoicePrefix),
+          orderPrefix: String(s.orderPrefix ?? state.settings.orderPrefix),
+          poPrefix: String(s.poPrefix ?? state.settings.poPrefix),
+          receiptPrefix: String(s.receiptPrefix ?? state.settings.receiptPrefix),
+          invoiceTemplate: (s.invoiceTemplate as CompanySettings["invoiceTemplate"]) ?? state.settings.invoiceTemplate,
+          defaultTaxState: String(s.defaultTaxState ?? state.settings.defaultTaxState),
+          sessionTimeoutMinutes: Math.max(5, Math.min(240, Number(s.sessionTimeoutMinutes ?? state.settings.sessionTimeoutMinutes))),
+          maxFailedLogins: Math.max(3, Math.min(10, Number(s.maxFailedLogins ?? state.settings.maxFailedLogins))),
         };
         changed.add("settings");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "UPDATE",
-          module: "Enterprise Administration",
+          module: "Enterprise Admin",
           recordId: "company-settings",
-          summary: `Updated enterprise settings (${state.settings.activeCompany})`,
+          summary: `Updated company configuration (${state.settings.legalName})`,
           ipAddress: ip,
           device,
         });
-        message = "Enterprise settings updated.";
+        message = "Enterprise settings saved to MongoDB.";
         break;
       }
 
@@ -1873,44 +2096,104 @@ export async function POST(req: NextRequest) {
           item.status = item.status === "Connected" ? "Disconnected" : "Connected";
           item.lastSync = new Date().toISOString();
           changed.add("integrations");
-          message = `${item.name} is now ${item.status}.`;
+          message = `${item.name} updated to ${item.status}.`;
         }
         break;
       }
 
       case "backup:create": {
         requirePerm("users");
-        const serialized = JSON.stringify(sanitizeStateForClient(state));
+        const snapshotData = sanitizeStateForClient(state);
+        const dataJson = JSON.stringify(snapshotData);
+        const checksum = computeChecksum(dataJson);
+        const hmacSignature = signHmac(dataJson);
+        const envelope = JSON.stringify(
+          {
+            version: "1.0",
+            exportedAt: new Date().toISOString(),
+            checksum,
+            hmacSignature,
+            data: snapshotData,
+          },
+          null,
+          2
+        );
+
         const snap = {
           id: `BKP-${today.replace(/-/g, "")}-${Date.now().toString().slice(-4)}`,
           createdAt: new Date().toISOString(),
           type: "Manual" as const,
-          sizeKb: Math.max(12, Math.round(Buffer.byteLength(serialized, "utf8") / 1024)),
+          sizeKb: Math.max(1, Math.round(Buffer.byteLength(envelope, "utf8") / 1024)),
           recordCount:
             state.products.length +
             state.customers.length +
             state.invoices.length +
             state.ledgerEntries.length +
             state.payments.length,
-          checksum: computeChecksum(serialized),
+          checksum,
+          hmacSignature,
           verified: true,
-          createdBy: session.name,
+          createdBy: liveUser.name,
           status: "Verified" as const,
         };
         state.backups.unshift(snap);
         changed.add("backups");
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "BACKUP",
           module: "Disaster Recovery",
           recordId: snap.id,
-          summary: `Created verified manual backup ${snap.id} (SHA-256: ${snap.checksum})`,
+          summary: `Created HMAC-SHA256 signed backup ${snap.id} (${checksum})`,
           ipAddress: ip,
           device,
         });
-        extraData = { snapshot: snap, exportJson: serialized };
-        message = `Backup ${snap.id} created & verified (${snap.checksum}).`;
+        extraData = { snapshot: snap, exportJson: envelope };
+        message = `HMAC-SHA256 verified backup ${snap.id} created.`;
+        break;
+      }
+
+      case "backup:restore": {
+        requirePerm("users");
+        const rawBackupText = String(payload.backupJson || "");
+        if (!rawBackupText) throw new Error("Backup JSON content is required.");
+        const parsed = JSON.parse(rawBackupText) as {
+          hmacSignature?: string;
+          data?: Record<string, unknown>;
+        };
+        if (!parsed.data || !parsed.hmacSignature) {
+          throw new Error("Invalid backup file: missing signed envelope.");
+        }
+        const canonical = JSON.stringify(parsed.data);
+        if (!verifyHmac(canonical, parsed.hmacSignature)) {
+          throw new Error("BACKUP INTEGRITY FAILED: HMAC-SHA256 signature mismatch — restore aborted.");
+        }
+
+        const safeRestored = sanitizePayload(parsed.data) as Partial<ERPDatabaseState>;
+        const restorableKeys: Array<ERPCollectionKey> = ALL_COLLECTION_KEYS.filter(
+          (k) => k !== "users" && k !== "auditLogs" && k !== "backups"
+        );
+        for (const k of restorableKeys) {
+          if (Array.isArray(safeRestored[k])) {
+            (state as unknown as Record<string, unknown>)[k] = safeRestored[k];
+            changed.add(k);
+          }
+        }
+        if (safeRestored.settings) {
+          state.settings = { ...state.settings, ...safeRestored.settings };
+          changed.add("settings");
+        }
+        appendAudit(state, {
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
+          action: "RESTORE",
+          module: "Disaster Recovery",
+          recordId: "full-restore",
+          summary: "Verified HMAC-SHA256 backup restored to MongoDB (user credentials & audit logs preserved)",
+          ipAddress: ip,
+          device,
+        });
+        message = "HMAC-SHA256 verified backup restored cleanly to MongoDB.";
         break;
       }
 
@@ -1920,7 +2203,7 @@ export async function POST(req: NextRequest) {
           snap.verified = true;
           snap.status = "Verified";
           changed.add("backups");
-          message = `Backup ${snap.id} integrity verified (${snap.checksum}).`;
+          message = `Backup ${snap.id} checksum (${snap.checksum}) verified.`;
         }
         break;
       }
@@ -1931,27 +2214,26 @@ export async function POST(req: NextRequest) {
           target: "products" | "customers";
           rows: Array<Record<string, string>>;
         };
-        if (!Array.isArray(rows) || rows.length === 0) {
-          throw new Error("No valid CSV rows provided.");
-        }
+        if (!Array.isArray(rows) || rows.length === 0) throw new Error("No valid CSV rows provided.");
         let count = 0;
         if (target === "products") {
-          for (const row of rows) {
+          for (const row of rows.slice(0, 500)) {
             if (!row.name) continue;
-            const sku = (row.sku || `SKU-IMP-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase();
-            const sell = Number(row.sellingPrice || 45);
+            const sku = String(row.sku || `SKU-IMP-${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase();
+            const sell = Math.max(0, Number(row.sellingPrice || 0));
+            const newId = uid("prod");
             state.products.unshift({
-              id: uid("prod"),
+              id: newId,
               sku,
-              name: row.name,
+              name: String(row.name).trim(),
               category: row.category || "Imported Goods",
-              description: row.description || "Bulk imported via CSV/Excel tool",
+              description: row.description || "",
               specifications: { Source: "CSV Import" },
               uom: row.uom || "Unit",
-              purchasePrice: Number(row.purchasePrice || round2(sell * 0.6)),
+              purchasePrice: Math.max(0, Number(row.purchasePrice || round2(sell * 0.6))),
               sellingPrice: sell,
-              wholesalePrice: Number(row.wholesalePrice || round2(sell * 0.85)),
-              minSellingPrice: Number(row.minSellingPrice || round2(sell * 0.75)),
+              wholesalePrice: Math.max(0, Number(row.wholesalePrice || round2(sell * 0.85))),
+              minSellingPrice: Math.max(0, Number(row.minSellingPrice || round2(sell * 0.75))),
               taxable: true,
               taxCategory: "Standard Tangible Goods",
               status: "Active",
@@ -1970,33 +2252,33 @@ export async function POST(req: NextRequest) {
           }
           changed.add("products");
         } else if (target === "customers") {
-          for (const row of rows) {
+          for (const row of rows.slice(0, 500)) {
             if (!row.companyName) continue;
-            const opening = Number(row.openingBalance || 0);
+            const opening = round2(Number(row.openingBalance || 0));
             const id = uid("cust");
-            const code = row.customerCode || `CUS-${1010 + state.customers.length}`;
+            const code = row.customerCode || `CUS-${1001 + state.customers.length}`;
             state.customers.unshift({
               id,
               customerCode: code,
-              companyName: row.companyName,
-              contactPerson: row.contactPerson || "Accounts Payable",
-              phone: row.phone || "+1 (800) 555-0199",
-              email: row.email || "ap@company.com",
-              billingAddress: row.billingAddress || "USA",
-              shippingAddress: row.shippingAddress || row.billingAddress || "USA",
-              state: row.state || "NY",
+              companyName: String(row.companyName).trim(),
+              contactPerson: row.contactPerson || "",
+              phone: row.phone || "",
+              email: row.email || "",
+              billingAddress: row.billingAddress || "",
+              shippingAddress: row.shippingAddress || row.billingAddress || "",
+              state: row.state || state.settings.defaultTaxState || "NY",
               customerType: "B2B Enterprise",
               category: row.category || "Commercial",
               segment: "Standard",
               taxId: row.taxId || "",
               taxExempt: false,
               paymentTerms: "Net 30",
-              creditLimit: Number(row.creditLimit || 30000),
+              creditLimit: Math.max(0, Number(row.creditLimit || 25000)),
               openingBalance: opening,
               currentBalance: opening,
-              notes: "Imported via Enterprise CSV Importer",
-              branchId: session.branchId || "br-ny",
-              salesRepId: state.employees[0]?.id || "emp-1",
+              notes: "Imported via CSV",
+              branchId: liveUser.branchId || state.branches[0]?.id || "br-hq",
+              salesRepId: state.employees[0]?.id || "",
               tasks: [],
               communications: [],
               createdAt: new Date().toISOString(),
@@ -2012,7 +2294,7 @@ export async function POST(req: NextRequest) {
                 debit: opening > 0 ? opening : 0,
                 credit: opening < 0 ? Math.abs(opening) : 0,
                 runningBalance: opening,
-                branchId: session.branchId || "br-ny",
+                branchId: liveUser.branchId || state.branches[0]?.id || "br-hq",
               });
               changed.add("ledgerEntries");
             }
@@ -2021,8 +2303,8 @@ export async function POST(req: NextRequest) {
           changed.add("customers");
         }
         appendAudit(state, {
-          actorName: session.name,
-          actorRole: session.role,
+          actorName: liveUser.name,
+          actorRole: liveUser.role,
           action: "CREATE",
           module: "Data Import",
           recordId: target,
@@ -2030,7 +2312,7 @@ export async function POST(req: NextRequest) {
           ipAddress: ip,
           device,
         });
-        message = `Successfully imported ${count} ${target} records.`;
+        message = `Imported ${count} ${target} records to MongoDB.`;
         break;
       }
 
@@ -2039,15 +2321,34 @@ export async function POST(req: NextRequest) {
     }
 
     await saveERPState(state, Array.from(changed));
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       message,
       extraData,
       state: sanitizeStateForClient(state),
     });
+
+    if (refreshedCookieToken) {
+      const isHttps =
+        req.headers.get("x-forwarded-proto") === "https" ||
+        req.nextUrl.protocol === "https:";
+      response.cookies.set(SESSION_COOKIE_NAME, refreshedCookieToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: isHttps,
+        path: "/",
+        maxAge: 60 * 60 * 8,
+      });
+    }
+
+    return response;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Operation failed";
-    const status = msg.startsWith("FORBIDDEN:") ? 403 : 400;
+    const status = msg.startsWith("FORBIDDEN:")
+      ? 403
+      : msg.startsWith("DATABASE_UNAVAILABLE")
+        ? 503
+        : 400;
     return NextResponse.json({ error: msg }, { status });
   }
 }

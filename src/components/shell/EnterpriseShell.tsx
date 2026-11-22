@@ -78,9 +78,11 @@ const NAV_GROUPS = [
 
 export function EnterpriseShell() {
   const [booting, setBooting] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [user, setUser] = useState<SafeUser | null>(null);
   const [state, setState] = useState<ClientERPState | null>(null);
-  const [storageMode, setStorageMode] = useState("local-seeded");
+  const [storageMode, setStorageMode] = useState("local-dev");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [lightTheme, setLightTheme] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -119,11 +121,15 @@ export function EnterpriseShell() {
       try {
         const res = await fetch("/api/auth/me", { cache: "no-store" });
         const data = await res.json();
-        setStorageMode(data.storage?.mode || "local-seeded");
+        setStorageMode(data.storage?.mode || "local-dev");
+        setSetupRequired(Boolean(data.setupRequired));
+        if (data.error) setBootError(data.error);
         if (data.authenticated && data.user) {
           setUser(data.user);
           await loadBootstrap();
         }
+      } catch {
+        setBootError("Unable to reach ERP backend service.");
       } finally {
         setBooting(false);
       }
@@ -282,7 +288,11 @@ export function EnterpriseShell() {
     return (
       <LoginScreen
         storageMode={storageMode}
+        setupRequired={setupRequired}
+        bootError={bootError}
         onAuthenticated={async (authenticatedUser) => {
+          setSetupRequired(false);
+          setBootError(null);
           setUser(authenticatedUser);
           await loadBootstrap();
         }}
@@ -353,7 +363,7 @@ export function EnterpriseShell() {
             <div className="flex items-center justify-between rounded-xl bg-[var(--bg-elevated)] px-3 py-2 text-[11px] border border-[var(--border-subtle)]">
               <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-400">
                 <Database className="h-3.5 w-3.5" />
-                {storageMode === "mongodb" ? "MongoDB Atlas" : "Local Seeded"}
+                {storageMode === "mongodb" ? "MongoDB Atlas Live" : "Local Dev DB"}
               </span>
               <span className="font-mono-num text-[10px] text-[var(--text-muted)]">TLS · JWT</span>
             </div>

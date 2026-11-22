@@ -5,7 +5,6 @@ import {
   DollarSign,
   TrendingUp,
   AlertTriangle,
-  Users,
   Package,
   CreditCard,
   Clock,
@@ -76,23 +75,30 @@ export function ExecutiveDashboard({
   } | null>(null);
 
   const metrics = useMemo(() => {
+    const now = new Date();
+    const todayIso = now.toISOString().slice(0, 10);
+    const curMonth = todayIso.slice(0, 7);
+    const curYear = todayIso.slice(0, 4);
+
     const activeInvoices = state.invoices.filter(
       (i) => i.status !== "Cancelled" && i.status !== "Refunded"
     );
     const totalSales = activeInvoices.reduce((s, i) => s + i.total, 0);
-    const todayIso = new Date().toISOString().slice(0, 10);
     const todaySales = activeInvoices
-      .filter((i) => i.issueDate === todayIso || i.issueDate === "2026-11-22")
+      .filter((i) => i.issueDate === todayIso)
       .reduce((s, i) => s + i.total, 0);
     const monthlySales = activeInvoices
-      .filter((i) => i.issueDate.startsWith("2026-11"))
+      .filter((i) => i.issueDate.startsWith(curMonth))
       .reduce((s, i) => s + i.total, 0);
+    const yearlySales = activeInvoices
+      .filter((i) => i.issueDate.startsWith(curYear))
+      .reduce((s, i) => s + i.total, 0);
+
     const totalReceivables = activeInvoices.reduce((s, i) => s + i.balanceDue, 0);
-    const overdueInvoices = activeInvoices.filter((i) => i.status === "Overdue");
-    const overdueAmount = overdueInvoices.reduce((s, i) => s + i.balanceDue, 0);
-    const pendingInvoices = activeInvoices.filter(
-      (i) => i.status === "Sent" || i.status === "Partial" || i.status === "Overdue"
+    const overdueInvoices = activeInvoices.filter(
+      (i) => i.balanceDue > 0 && (i.status === "Overdue" || i.dueDate < todayIso)
     );
+    const overdueAmount = overdueInvoices.reduce((s, i) => s + i.balanceDue, 0);
     const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
     const totalPayables = state.suppliers.reduce((s, v) => s + v.currentPayable, 0);
     const totalCOGS = activeInvoices.reduce(
@@ -107,7 +113,7 @@ export function ExecutiveDashboard({
       0
     );
     const cashPosition = state.accounts
-      .filter((a) => a.code === "1000" || a.code === "1010" || a.code === "1020")
+      .filter((a) => a.subType === "Bank" || a.code === "1000")
       .reduce((s, a) => s + a.balance, 0);
 
     const lowStockProducts = state.products
@@ -119,7 +125,6 @@ export function ExecutiveDashboard({
       })
       .filter((x) => x.qty <= x.product.reorderLevel);
 
-    // Product Leaderboard
     const prodMap = new Map<string, { name: string; sku: string; rev: number; profit: number; qty: number }>();
     for (const inv of activeInvoices) {
       for (const item of inv.items) {
@@ -138,7 +143,6 @@ export function ExecutiveDashboard({
     }
     const topProducts = Array.from(prodMap.values()).sort((a, b) => b.rev - a.rev);
 
-    // Top Customers
     const topCustomers = state.customers
       .map((c) => {
         const billed = activeInvoices
@@ -148,7 +152,7 @@ export function ExecutiveDashboard({
       })
       .sort((a, b) => b.billed - a.billed);
 
-    // Branch Performance
+    // 100% live Branch Performance from actual invoices
     const branchData = state.branches.map((b) => {
       const sales = activeInvoices
         .filter((i) => i.branchId === b.id)
@@ -159,30 +163,43 @@ export function ExecutiveDashboard({
       return {
         name: b.code,
         fullName: b.name,
-        sales: Math.round(sales + 68000),
+        sales: Math.round(sales),
         target: b.monthlyTarget,
         expenses: Math.round(branchExp),
       };
     });
 
-    const monthlyTrend = [
-      { month: "Jun", revenue: 84200, cashIn: 76500, expenses: 29400 },
-      { month: "Jul", revenue: 96800, cashIn: 88200, expenses: 31200 },
-      { month: "Aug", revenue: 108400, cashIn: 94100, expenses: 33800 },
-      { month: "Sep", revenue: 102600, cashIn: 99400, expenses: 30900 },
-      { month: "Oct", revenue: 118900, cashIn: 106800, expenses: 32500 },
-      { month: "Nov", revenue: Math.round(monthlySales + 74000), cashIn: Math.round(state.payments.reduce((s, p) => s + p.amount, 0) + 64000), expenses: Math.round(totalExpenses) },
-    ];
+    // 100% live Last 6 Months Trend computed strictly from MongoDB records
+    const monthlyTrend: Array<{ month: string; revenue: number; cashIn: number; expenses: number }> = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("en-US", { month: "short" });
+      const rev = activeInvoices
+        .filter((inv) => inv.issueDate.startsWith(ym))
+        .reduce((s, inv) => s + inv.total, 0);
+      const cash = state.payments
+        .filter((p) => p.date.startsWith(ym) && p.paymentType !== "Refund" && p.paymentType !== "Reversal")
+        .reduce((s, p) => s + p.amount, 0);
+      const exp = state.expenses
+        .filter((e) => e.date.startsWith(ym))
+        .reduce((s, e) => s + e.amount, 0);
+      monthlyTrend.push({
+        month: label,
+        revenue: Math.round(rev),
+        cashIn: Math.round(cash),
+        expenses: Math.round(exp),
+      });
+    }
 
     return {
       totalSales,
       todaySales,
       monthlySales,
-      yearlySales: totalSales + 512400,
+      yearlySales,
       totalReceivables,
       overdueInvoices,
       overdueAmount,
-      pendingInvoices,
       totalExpenses,
       totalPayables,
       grossProfit,
@@ -194,11 +211,11 @@ export function ExecutiveDashboard({
       topCustomers,
       branchData,
       monthlyTrend,
+      curYear,
     };
   }, [state]);
 
   const show = (id: string) => enabledWidgets.includes(id);
-
   const toggleWidget = (id: string) => {
     setEnabledWidgets((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -209,7 +226,7 @@ export function ExecutiveDashboard({
     const filtered = state.invoices.filter(filterFn);
     setDrilldown({
       title,
-      subtitle: `${filtered.length} underlying US invoices & financial records`,
+      subtitle: `${filtered.length} live database records`,
       rows: filtered.map((inv) => ({
         col1: inv.invoiceNo,
         col2: state.customers.find((c) => c.id === inv.customerId)?.companyName || "Customer",
@@ -223,9 +240,9 @@ export function ExecutiveDashboard({
   return (
     <div className="space-y-6">
       <SectionHeader
-        badge="Executive Command Center · Live"
-        title={`Welcome back, ${user.name.split(" ")[0]}`}
-        subtitle={`Real-time consolidated telemetry for ${state.settings.activeCompany}. Click any KPI tile to drill down into underlying invoices & ledger transactions.`}
+        badge="Executive Command Center · 100% Live MongoDB Telemetry"
+        title={`Welcome, ${user.name.split(" ")[0]}`}
+        subtitle={`Real-time consolidated ledger & operations for ${state.settings.activeCompany}. Every figure updates instantaneously from live database transactions.`}
         actions={
           <>
             <SecondaryButton onClick={() => setCustomizeOpen(true)}>
@@ -233,7 +250,7 @@ export function ExecutiveDashboard({
               Customize Dashboard
             </SecondaryButton>
             <PrimaryButton onClick={() => onNavigate("sales")}>
-              + Quick Sales Punch
+              + New Sales Order
             </PrimaryButton>
             <SecondaryButton onClick={() => onNavigate("analytics")}>
               <Sparkles className="h-4 w-4 text-blue-400" />
@@ -243,28 +260,27 @@ export function ExecutiveDashboard({
         }
       />
 
-      {/* Section 37: CEO One-Screen Company Flow Strip */}
       {show("ceo-strip") && (
         <GlassCard className="p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[11px] font-bold uppercase tracking-widest text-blue-400">
-              CEO 360° Enterprise Pulse — Click Any Pillar to Drill Down
+              CEO 360° Live Company Overview — Click Any Pillar to Drill Down
             </span>
             <span className="text-[11px] text-[var(--text-muted)] font-mono-num">
-              FY 2026 · USD · {state.branches.length} Branches · {state.employees.length} Staff
+              FY {metrics.curYear} · USD · {state.branches.length} Branch(es) · {state.employees.length} Staff
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
             {[
               { label: "YTD Revenue", val: formatCompactUSD(metrics.yearlySales), tab: "analytics", color: "text-emerald-400" },
-              { label: "Active Sales", val: formatCompactUSD(metrics.totalSales), tab: "sales", color: "text-blue-400" },
+              { label: "Total Sales", val: formatCompactUSD(metrics.totalSales), tab: "sales", color: "text-blue-400" },
               { label: "Gross Profit", val: formatCompactUSD(metrics.grossProfit), tab: "accounting", color: "text-emerald-400" },
               { label: "Expenses", val: formatCompactUSD(metrics.totalExpenses), tab: "accounting", color: "text-amber-400" },
               { label: "Inventory", val: formatCompactUSD(metrics.inventoryValuation), tab: "inventory", color: "text-cyan-400" },
               { label: "Receivables", val: formatCompactUSD(metrics.totalReceivables), tab: "ledger", color: "text-rose-400" },
               { label: "Payables", val: formatCompactUSD(metrics.totalPayables), tab: "purchasing", color: "text-amber-400" },
               { label: "Customers", val: String(state.customers.length), tab: "customers", color: "text-indigo-400" },
-              { label: "Branches", val: String(state.branches.length), tab: "operations", color: "text-blue-400" },
+              { label: "Products", val: String(state.products.length), tab: "products", color: "text-blue-400" },
               { label: "Cash & Bank", val: formatCompactUSD(metrics.cashPosition), tab: "accounting", color: "text-emerald-400" },
             ].map((pillar) => (
               <button
@@ -280,21 +296,18 @@ export function ExecutiveDashboard({
         </GlassCard>
       )}
 
-      {/* Primary KPI Grid */}
       {show("kpi-grid") && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiTile
             label="Total Invoiced Sales"
             value={formatUSD(metrics.totalSales)}
-            delta="+14.8% MoM"
+            delta={`MTD ${formatCompactUSD(metrics.monthlySales)}`}
             positive
             sublabel={`Today: ${formatUSD(metrics.todaySales)}`}
             icon={<DollarSign className="h-5 w-5" />}
             tone="blue"
             delay={0.02}
-            onClick={() =>
-              openInvoiceDrilldown("All Active Sales Invoices", (i) => i.status !== "Cancelled")
-            }
+            onClick={() => openInvoiceDrilldown("All Active Sales Invoices", (i) => i.status !== "Cancelled")}
           />
           <KpiTile
             label="Total Receivables (AR)"
@@ -305,16 +318,14 @@ export function ExecutiveDashboard({
             icon={<CreditCard className="h-5 w-5" />}
             tone="rose"
             delay={0.06}
-            onClick={() =>
-              openInvoiceDrilldown("Outstanding Accounts Receivable", (i) => i.balanceDue > 0)
-            }
+            onClick={() => openInvoiceDrilldown("Outstanding Receivables", (i) => i.balanceDue > 0)}
           />
           <KpiTile
-            label="Net Cash & Treasury"
+            label="Cash & Bank Balance"
             value={formatUSD(metrics.cashPosition)}
-            delta="Reconciled"
-            positive
-            sublabel={`Monthly Sales: ${formatCompactUSD(metrics.monthlySales)}`}
+            delta={`Net ${formatCompactUSD(metrics.netProfit)}`}
+            positive={metrics.netProfit >= 0}
+            sublabel={`${state.payments.length} recorded payments`}
             icon={<Wallet className="h-5 w-5" />}
             tone="emerald"
             delay={0.1}
@@ -334,7 +345,6 @@ export function ExecutiveDashboard({
         </div>
       )}
 
-      {/* Charts Row */}
       {(show("revenue-chart") || show("branch-performance")) && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           {show("revenue-chart") && (
@@ -342,15 +352,13 @@ export function ExecutiveDashboard({
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-[var(--text-primary)]">
-                    Revenue, Cash-Flow & Expense Velocity
+                    Revenue, Cash Collected & Expense Trend
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    6-month enterprise financial trajectory (USD)
+                    Live 6-month roll-up directly from MongoDB invoices, payments & expenses
                   </p>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-400">
-                  <TrendingUp className="h-3.5 w-3.5" /> +18.2% YoY
-                </span>
+                <TrendingUp className="h-4 w-4 text-emerald-400" />
               </div>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -367,17 +375,12 @@ export function ExecutiveDashboard({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
                     <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
-                    <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
+                    <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#0f172a",
-                        borderColor: "rgba(148,163,184,0.25)",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                      }}
+                      contentStyle={{ backgroundColor: "#0f172a", borderColor: "rgba(148,163,184,0.25)", borderRadius: "12px", fontSize: "12px" }}
                       formatter={(val: number) => formatUSD(val)}
                     />
-                    <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#3b82f6" strokeWidth={2.5} fill="url(#revGrad)" />
+                    <Area type="monotone" dataKey="revenue" name="Invoiced Revenue" stroke="#3b82f6" strokeWidth={2.5} fill="url(#revGrad)" />
                     <Area type="monotone" dataKey="cashIn" name="Cash Collected" stroke="#10b981" strokeWidth={2} fill="url(#cashGrad)" />
                     <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#f59e0b" strokeWidth={2} fill="transparent" />
                   </AreaChart>
@@ -394,7 +397,7 @@ export function ExecutiveDashboard({
                     Branch Performance vs Target
                   </h3>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Multi-location sales distribution across US hubs
+                    Live invoiced sales per configured branch location
                   </p>
                 </div>
                 <Building2 className="h-4 w-4 text-blue-400" />
@@ -404,14 +407,9 @@ export function ExecutiveDashboard({
                   <BarChart data={metrics.branchData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.12)" />
                     <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} />
-                    <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
+                    <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#0f172a",
-                        borderColor: "rgba(148,163,184,0.25)",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                      }}
+                      contentStyle={{ backgroundColor: "#0f172a", borderColor: "rgba(148,163,184,0.25)", borderRadius: "12px", fontSize: "12px" }}
                       formatter={(val: number) => formatUSD(val)}
                     />
                     <Bar dataKey="sales" name="Actual Sales" fill="#6366f1" radius={[8, 8, 0, 0]} />
@@ -424,7 +422,6 @@ export function ExecutiveDashboard({
         </div>
       )}
 
-      {/* Mid Row: Top Products, Top Customers, Alerts */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         {show("top-products") && (
           <GlassCard className="lg:col-span-4">
@@ -432,43 +429,33 @@ export function ExecutiveDashboard({
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 Top-Selling Products
               </h3>
-              <button
-                onClick={() => onNavigate("products")}
-                className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer inline-flex items-center gap-1"
-              >
+              <button onClick={() => onNavigate("products")} className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer inline-flex items-center gap-1">
                 Catalog <ArrowRight className="h-3 w-3" />
               </button>
             </div>
-            <div className="space-y-3">
-              {metrics.topProducts.slice(0, 5).map((p, idx) => (
-                <div
-                  key={p.sku}
-                  className="flex items-center justify-between rounded-xl bg-[var(--bg-elevated)] px-3.5 py-2.5 border border-[var(--border-subtle)]"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold font-mono-num text-blue-400">
-                        #{idx + 1}
-                      </span>
+            {metrics.topProducts.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-6 text-center">
+                No product sales recorded yet. Create an order to rank live product revenue.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {metrics.topProducts.slice(0, 5).map((p, idx) => (
+                  <div key={p.sku} className="flex items-center justify-between rounded-xl bg-[var(--bg-elevated)] px-3.5 py-2.5 border border-[var(--border-subtle)]">
+                    <div className="min-w-0">
                       <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                        <span className="font-mono-num text-xs text-blue-400 mr-1.5">#{idx + 1}</span>
                         {p.name}
                       </p>
+                      <p className="text-[11px] text-[var(--text-muted)] font-mono-num">{p.sku} · {p.qty} units</p>
                     </div>
-                    <p className="text-[11px] text-[var(--text-muted)] font-mono-num">
-                      {p.sku} · {p.qty.toLocaleString()} units sold
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold font-mono-num text-emerald-400">{formatUSD(p.rev)}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">GP {formatCompactUSD(p.profit)}</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold font-mono-num text-emerald-400">
-                      {formatUSD(p.rev)}
-                    </p>
-                    <p className="text-[10px] text-[var(--text-muted)]">
-                      GP {formatCompactUSD(p.profit)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </GlassCard>
         )}
 
@@ -478,45 +465,30 @@ export function ExecutiveDashboard({
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 Top Customers & Balances
               </h3>
-              <button
-                onClick={() => onNavigate("ledger")}
-                className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer inline-flex items-center gap-1"
-              >
-                Ledgers <ArrowRight className="h-3 w-3" />
+              <button onClick={() => onNavigate("customers")} className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer inline-flex items-center gap-1">
+                CRM <ArrowRight className="h-3 w-3" />
               </button>
             </div>
-            <div className="space-y-3">
-              {metrics.topCustomers.slice(0, 5).map((c) => {
-                const util = Math.min(100, Math.round((c.currentBalance / Math.max(1, c.creditLimit)) * 100));
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-xl bg-[var(--bg-elevated)] px-3.5 py-2.5 border border-[var(--border-subtle)]"
-                  >
+            {metrics.topCustomers.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-6 text-center">
+                No customers registered yet. Add your first client in Customers & CRM.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {metrics.topCustomers.slice(0, 5).map((c) => (
+                  <div key={c.id} className="rounded-xl bg-[var(--bg-elevated)] px-3.5 py-2.5 border border-[var(--border-subtle)]">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
-                        {c.companyName}
-                      </p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{c.companyName}</p>
                       <StatusBadge status={c.segment} />
                     </div>
-                    <div className="mt-1.5 flex items-center justify-between text-xs">
-                      <span className="text-[var(--text-muted)]">
-                        Billed: <strong className="font-mono-num text-[var(--text-primary)]">{formatCompactUSD(c.billed)}</strong>
-                      </span>
-                      <span className="font-mono-num text-amber-400 font-semibold">
-                        Bal: {formatUSD(c.currentBalance)}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${util > 85 ? "bg-rose-500" : util > 60 ? "bg-amber-500" : "bg-blue-500"}`}
-                        style={{ width: `${util}%` }}
-                      />
+                    <div className="mt-1 flex items-center justify-between text-xs">
+                      <span className="text-[var(--text-muted)]">Billed: <strong className="font-mono-num text-[var(--text-primary)]">{formatUSD(c.billed)}</strong></span>
+                      <span className="font-mono-num text-amber-400 font-semibold">Bal: {formatUSD(c.currentBalance)}</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </GlassCard>
         )}
 
@@ -524,193 +496,119 @@ export function ExecutiveDashboard({
           <GlassCard className="lg:col-span-4">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Action Required Alerts
+                Live Operational Alerts
               </h3>
               <AlertTriangle className="h-4 w-4 text-amber-400" />
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 max-h-64 overflow-y-auto">
               {metrics.overdueInvoices.map((inv) => (
-                <div
-                  key={inv.id}
-                  onClick={() => onNavigate("ledger")}
-                  className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 cursor-pointer hover:bg-rose-500/15 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-rose-300 font-mono-num">
-                      OVERDUE · {inv.invoiceNo}
-                    </span>
-                    <span className="text-xs font-bold font-mono-num text-rose-300">
-                      {formatUSD(inv.balanceDue)}
-                    </span>
+                <div key={inv.id} onClick={() => onNavigate("ledger")} className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 cursor-pointer">
+                  <div className="flex items-center justify-between text-xs font-bold text-rose-300 font-mono-num">
+                    <span>OVERDUE · {inv.invoiceNo}</span>
+                    <span>{formatUSD(inv.balanceDue)}</span>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1">
+                  <p className="text-[11px] text-slate-300 mt-0.5">
                     {state.customers.find((c) => c.id === inv.customerId)?.companyName} — Due {formatUSDate(inv.dueDate)}
                   </p>
                 </div>
               ))}
-              {metrics.lowStockProducts.map(({ product, qty }) => (
-                <div
-                  key={product.id}
-                  onClick={() => onNavigate("inventory")}
-                  className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 cursor-pointer hover:bg-amber-500/15 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-300">
-                      LOW STOCK · {product.name}
-                    </span>
-                    <span className="text-xs font-bold font-mono-num text-amber-300">
-                      {qty} / {product.reorderLevel} {product.uom}s
-                    </span>
+              {metrics.lowStockProducts.slice(0, 4).map(({ product, qty }) => (
+                <div key={product.id} onClick={() => onNavigate("inventory")} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 cursor-pointer">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-300">
+                    <span>LOW STOCK · {product.name}</span>
+                    <span className="font-mono-num">{qty} / {product.reorderLevel}</span>
                   </div>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
-                    SKU {product.sku} requires purchase replenishment.
-                  </p>
+                  <p className="text-[11px] text-slate-300 mt-0.5">Stock in or issue PO to replenish {product.sku}.</p>
                 </div>
               ))}
-              {state.approvals
-                .filter((a) => a.status === "Pending")
-                .slice(0, 2)
-                .map((a) => (
-                  <div
-                    key={a.id}
-                    onClick={() => onNavigate("operations")}
-                    className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 cursor-pointer hover:bg-blue-500/15 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-300">
-                        APPROVAL · {a.currentStage} Stage
-                      </span>
-                      <span className="text-xs font-bold font-mono-num text-blue-300">
-                        {formatUSD(a.amount)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 mt-0.5 truncate">{a.title}</p>
-                  </div>
-                ))}
+              {metrics.overdueInvoices.length === 0 && metrics.lowStockProducts.length === 0 && (
+                <p className="text-xs text-emerald-400 py-6 text-center">All operational metrics healthy.</p>
+              )}
             </div>
           </GlassCard>
         )}
       </div>
 
-      {/* Bottom Row: Recent Transactions & Recent Payments */}
       {show("recent-activity") && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           <GlassCard className="lg:col-span-7">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-blue-400" />
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                  Recent Invoices & Transactions
-                </h3>
-              </div>
-              <button
-                onClick={() => onNavigate("sales")}
-                className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer"
-              >
-                View All Invoices
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-blue-400" /> Recent Invoices
+              </h3>
+              <button onClick={() => onNavigate("sales")} className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer">
+                View All
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] uppercase">
-                    <th className="pb-2.5 font-semibold">Invoice #</th>
-                    <th className="pb-2.5 font-semibold">Customer</th>
-                    <th className="pb-2.5 font-semibold">Issue Date</th>
-                    <th className="pb-2.5 font-semibold text-right">Total</th>
-                    <th className="pb-2.5 font-semibold text-right">Balance</th>
-                    <th className="pb-2.5 font-semibold text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-subtle)]">
-                  {state.invoices.slice(0, 6).map((inv) => (
-                    <tr key={inv.id} className="hover:bg-blue-500/5 transition-colors">
-                      <td className="py-2.5 font-mono-num font-semibold text-blue-400">
-                        {inv.invoiceNo}
-                      </td>
-                      <td className="py-2.5 text-[var(--text-primary)] font-medium">
-                        {state.customers.find((c) => c.id === inv.customerId)?.companyName}
-                      </td>
-                      <td className="py-2.5 text-[var(--text-secondary)]">
-                        {formatUSDate(inv.issueDate)}
-                      </td>
-                      <td className="py-2.5 text-right font-mono-num font-semibold text-[var(--text-primary)]">
-                        {formatUSD(inv.total)}
-                      </td>
-                      <td className="py-2.5 text-right font-mono-num text-amber-400">
-                        {formatUSD(inv.balanceDue)}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <StatusBadge status={inv.status} />
-                      </td>
+            {state.invoices.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-6 text-center">No invoices created yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] uppercase">
+                      <th className="pb-2">Invoice #</th>
+                      <th className="pb-2">Customer</th>
+                      <th className="pb-2 text-right">Total</th>
+                      <th className="pb-2 text-right">Balance</th>
+                      <th className="pb-2 text-right">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-subtle)]">
+                    {state.invoices.slice(0, 6).map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="py-2 font-mono-num font-semibold text-blue-400">{inv.invoiceNo}</td>
+                        <td className="py-2">{state.customers.find((c) => c.id === inv.customerId)?.companyName}</td>
+                        <td className="py-2 text-right font-mono-num">{formatUSD(inv.total)}</td>
+                        <td className="py-2 text-right font-mono-num text-amber-400">{formatUSD(inv.balanceDue)}</td>
+                        <td className="py-2 text-right"><StatusBadge status={inv.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </GlassCard>
 
           <GlassCard className="lg:col-span-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                  Recent Payments Received
-                </h3>
-              </div>
-              <button
-                onClick={() => onNavigate("ledger")}
-                className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer"
-              >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Clock className="h-4 w-4 text-emerald-400" /> Recent Payments
+              </h3>
+              <button onClick={() => onNavigate("ledger")} className="text-xs font-semibold text-blue-400 hover:underline cursor-pointer">
                 Payment Hub
               </button>
             </div>
-            <div className="space-y-3">
-              {state.payments.slice(0, 5).map((pay) => (
-                <div
-                  key={pay.id}
-                  className="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold font-mono-num text-emerald-400">
-                      {pay.receiptNo} · {pay.method}
-                    </p>
-                    <p className="text-xs font-medium text-[var(--text-primary)] truncate mt-0.5">
-                      {state.customers.find((c) => c.id === pay.customerId)?.companyName}
-                    </p>
-                    <p className="text-[11px] text-[var(--text-muted)]">
-                      {formatUSDate(pay.date)} · Ref {pay.reference}
-                    </p>
+            {state.payments.length === 0 ? (
+              <p className="text-xs text-[var(--text-muted)] py-6 text-center">No payments recorded yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {state.payments.slice(0, 5).map((pay) => (
+                  <div key={pay.id} className="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-3 text-xs">
+                    <div>
+                      <p className="font-mono-num font-bold text-emerald-400">{pay.receiptNo} · {pay.method}</p>
+                      <p className="text-[var(--text-primary)]">{state.customers.find((c) => c.id === pay.customerId)?.companyName}</p>
+                    </div>
+                    <p className="font-mono-num font-bold text-emerald-400">+{formatUSD(pay.amount)}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold font-mono-num text-emerald-400">
-                      +{formatUSD(pay.amount)}
-                    </p>
-                    <StatusBadge status={pay.reconciled ? "Reconciled" : "Pending"} className="mt-1" />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </GlassCard>
         </div>
       )}
 
-      {/* Drill-down Modal */}
-      <Modal
-        open={Boolean(drilldown)}
-        onClose={() => setDrilldown(null)}
-        title={drilldown?.title || ""}
-        subtitle={drilldown?.subtitle}
-        maxWidth="max-w-3xl"
-      >
+      <Modal open={Boolean(drilldown)} onClose={() => setDrilldown(null)} title={drilldown?.title || ""} subtitle={drilldown?.subtitle} maxWidth="max-w-3xl">
         {drilldown && (
-          <div className="overflow-x-auto">
+          drilldown.rows.length === 0 ? (
+            <p className="text-xs text-[var(--text-muted)] py-6 text-center">No matching records in MongoDB yet.</p>
+          ) : (
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] uppercase">
                   <th className="pb-2">Ref</th>
-                  <th className="pb-2">Account / Party</th>
-                  <th className="pb-2">Details</th>
+                  <th className="pb-2">Party</th>
+                  <th className="pb-2">Due</th>
                   <th className="pb-2 text-right">Amount</th>
                   <th className="pb-2 text-right">Status</th>
                 </tr>
@@ -718,52 +616,32 @@ export function ExecutiveDashboard({
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {drilldown.rows.map((r, i) => (
                   <tr key={i}>
-                    <td className="py-2.5 font-mono-num font-semibold text-blue-400">{r.col1}</td>
-                    <td className="py-2.5 text-[var(--text-primary)] font-medium">{r.col2}</td>
-                    <td className="py-2.5 text-[var(--text-secondary)]">{r.col3}</td>
-                    <td className="py-2.5 text-right font-mono-num font-bold text-[var(--text-primary)]">{r.amount}</td>
-                    <td className="py-2.5 text-right"><StatusBadge status={r.status} /></td>
+                    <td className="py-2 font-mono-num font-semibold text-blue-400">{r.col1}</td>
+                    <td className="py-2">{r.col2}</td>
+                    <td className="py-2">{r.col3}</td>
+                    <td className="py-2 text-right font-mono-num font-bold">{r.amount}</td>
+                    <td className="py-2 text-right"><StatusBadge status={r.status} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          )
         )}
       </Modal>
 
-      {/* Dashboard Customization Modal */}
-      <Modal
-        open={customizeOpen}
-        onClose={() => setCustomizeOpen(false)}
-        title="Customize Executive Dashboard"
-        subtitle="Select which KPI blocks and analytics panels appear on your Command Center."
-        maxWidth="max-w-lg"
-      >
+      <Modal open={customizeOpen} onClose={() => setCustomizeOpen(false)} title="Customize Executive Dashboard" maxWidth="max-w-lg">
         <div className="space-y-2.5">
           {DEFAULT_WIDGETS.map((w) => (
-            <label
-              key={w.id}
-              className="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3 cursor-pointer"
-            >
-              <span className="text-sm font-medium text-[var(--text-primary)]">{w.label}</span>
-              <input
-                type="checkbox"
-                checked={enabledWidgets.includes(w.id)}
-                onChange={() => toggleWidget(w.id)}
-                className="h-4 w-4 accent-blue-500"
-              />
+            <label key={w.id} className="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-4 py-3 cursor-pointer">
+              <span className="text-sm font-medium">{w.label}</span>
+              <input type="checkbox" checked={enabledWidgets.includes(w.id)} onChange={() => toggleWidget(w.id)} className="h-4 w-4 accent-blue-500" />
             </label>
           ))}
         </div>
         <div className="mt-5 flex justify-end gap-2">
           <SecondaryButton onClick={() => setCustomizeOpen(false)}>Cancel</SecondaryButton>
-          <PrimaryButton
-            onClick={async () => {
-              await onRunAction("user:dashboard-layout", { layout: enabledWidgets });
-              setCustomizeOpen(false);
-            }}
-          >
-            Save Layout Preference
+          <PrimaryButton onClick={async () => { await onRunAction("user:dashboard-layout", { layout: enabledWidgets }); setCustomizeOpen(false); }}>
+            Save Layout
           </PrimaryButton>
         </div>
       </Modal>

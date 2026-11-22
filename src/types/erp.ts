@@ -43,6 +43,7 @@ export interface UserAccount {
   lastLoginAt?: string | null;
   lastLoginIp?: string | null;
   mfaEnabled: boolean;
+  tokenVersion: number;
   permissions: Record<PermissionKey, boolean>;
   dashboardLayout?: string[];
   createdAt: string;
@@ -485,6 +486,8 @@ export interface DocumentRecord {
   relatedEntityName: string;
   fileName: string;
   fileSizeKb: number;
+  mimeType?: string;
+  fileDataUrl?: string;
   uploadedBy: string;
   uploadedAt: string;
   notes: string;
@@ -533,6 +536,7 @@ export interface BackupSnapshot {
   sizeKb: number;
   recordCount: number;
   checksum: string;
+  hmacSignature?: string;
   verified: boolean;
   createdBy: string;
   status: "Completed" | "Restored" | "Verified";
@@ -545,7 +549,8 @@ export interface EmailLog {
   subject: string;
   template: "Invoice" | "Customer Statement" | "Payment Receipt" | "Overdue Reminder" | "Executive Report";
   referenceNo: string;
-  status: "Delivered" | "Queued (SMTP Mock)";
+  status: "Delivered (SMTP)" | "Failed (SMTP Error)" | "Not Sent (SMTP Unconfigured)";
+  detail?: string;
 }
 
 export interface IntegrationItem {
